@@ -2,25 +2,44 @@ import { firebaseConfig } from './config.js';
 import { createStore, newId } from './store.js';
 
 /* ---------------- Constanten ---------------- */
-// Standaard bewaartijden in de vriezer (maanden), globaal gebaseerd op
+const SPACES = [
+  { id: 'vriezer',  label: 'Vriezer',      short: 'Vriezer',  icon: '❄️', in: 'in de vriezer',      out: 'uit de vriezer',      loc: 'bijv. Lade 1' },
+  { id: 'kast',     label: 'Voorraadkast', short: 'Kast',     icon: '🥫', in: 'in de voorraadkast', out: 'uit de voorraadkast', loc: 'bijv. Bovenste plank' },
+  { id: 'koelkast', label: 'Koelkast',     short: 'Koelkast', icon: '🥛', in: 'in de koelkast',     out: 'uit de koelkast',     loc: 'bijv. Deur' },
+];
+const SPACE = Object.fromEntries(SPACES.map((s) => [s.id, s]));
+
+// `months` = standaard bewaartijd in de vriezer, globaal gebaseerd op
 // richtlijnen van o.a. het Voedingscentrum. Aanpasbaar in Instellingen.
 const CATEGORIES = [
-  { id: 'vlees',     label: 'Vlees',          icon: '🥩', months: 6 },
-  { id: 'gehakt',    label: 'Gehakt & worst', icon: '🍖', months: 3 },
-  { id: 'gevogelte', label: 'Kip & gevogelte',icon: '🍗', months: 6 },
-  { id: 'vis',       label: 'Vis',            icon: '🐟', months: 3 },
-  { id: 'groente',   label: 'Groente',        icon: '🥦', months: 9 },
-  { id: 'fruit',     label: 'Fruit',          icon: '🍓', months: 9 },
-  { id: 'brood',     label: 'Brood & gebak',  icon: '🍞', months: 3 },
-  { id: 'maaltijd',  label: 'Maaltijd/restje',icon: '🍲', months: 3 },
-  { id: 'soep',      label: 'Soep & saus',    icon: '🥣', months: 4 },
-  { id: 'zuivel',    label: 'Zuivel & kaas',  icon: '🧀', months: 3 },
-  { id: 'ijs',       label: 'IJs & dessert',  icon: '🍨', months: 4 },
-  { id: 'overig',    label: 'Overig',         icon: '📦', months: 6 },
+  { id: 'vlees',      label: 'Vlees',              icon: '🥩', months: 6 },
+  { id: 'gehakt',     label: 'Gehakt & worst',     icon: '🍖', months: 3 },
+  { id: 'gevogelte',  label: 'Kip & gevogelte',    icon: '🍗', months: 6 },
+  { id: 'vis',        label: 'Vis',                icon: '🐟', months: 3 },
+  { id: 'groente',    label: 'Groente',            icon: '🥦', months: 9 },
+  { id: 'fruit',      label: 'Fruit',              icon: '🍓', months: 9 },
+  { id: 'brood',      label: 'Brood & gebak',      icon: '🍞', months: 3 },
+  { id: 'maaltijd',   label: 'Maaltijd/restje',    icon: '🍲', months: 3 },
+  { id: 'soep',       label: 'Soep & saus',        icon: '🥣', months: 4 },
+  { id: 'zuivel',     label: 'Zuivel & kaas',      icon: '🧀', months: 3 },
+  { id: 'ijs',        label: 'IJs & dessert',      icon: '🍨', months: 4 },
+  { id: 'droog',      label: 'Pasta, rijst & granen', icon: '🍝', months: 6 },
+  { id: 'conserven',  label: 'Blik & pot',         icon: '🥫', months: 6 },
+  { id: 'ontbijt',    label: 'Ontbijt & beleg',    icon: '🍯', months: 6 },
+  { id: 'bakken',     label: 'Bakken & kruiden',   icon: '🧂', months: 6 },
+  { id: 'snacks',     label: 'Snacks & snoep',     icon: '🍪', months: 6 },
+  { id: 'dranken',    label: 'Dranken',            icon: '🧃', months: 6 },
+  { id: 'huishouden', label: 'Huishouden & verzorging', icon: '🧻', months: 6 },
+  { id: 'overig',     label: 'Overig',             icon: '📦', months: 6 },
 ];
+const FREEZER_CATS = ['vlees', 'gehakt', 'gevogelte', 'vis', 'groente', 'fruit', 'brood', 'maaltijd', 'soep', 'zuivel', 'ijs', 'overig'];
 const CAT = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]));
-const UNITS = ['stuks', 'porties', 'zakjes', 'bakjes', 'gram', 'kg', 'liter'];
+const UNITS = ['stuks', 'porties', 'zakjes', 'bakjes', 'pakken', 'potten', 'blikken', 'flessen', 'gram', 'kg', 'liter'];
+const SINGULAR = { stuks: 'stuk', porties: 'portie', zakjes: 'zakje', bakjes: 'bakje', pakken: 'pak', potten: 'pot', blikken: 'blik', flessen: 'fles' };
+const WEIGHT_UNITS = ['gram', 'kg', 'liter'];
+const DEFAULT_STORES = ['Albert Heijn', 'Jumbo', 'Lidl', 'Aldi', 'Plus', 'Dirk'];
 const WARN_DAYS = 14;
+const SNOOZE_DAYS = 7;
 
 /* ---------------- Helpers ---------------- */
 const $ = (s, el = document) => el.querySelector(s);
@@ -30,6 +49,7 @@ const ls = {
   get(k, d = null) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+const round = (n) => Math.round(n * 1000) / 1000;
 
 const pad = (n) => String(n).padStart(2, '0');
 const toISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -48,34 +68,47 @@ const fmtDate = (iso, withYear) => {
   const y = withYear ?? d.getFullYear() !== new Date().getFullYear();
   return d.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short', ...(y ? { year: 'numeric' } : {}) });
 };
-const SINGULAR = { stuks: 'stuk', porties: 'portie', zakjes: 'zakje', bakjes: 'bakje' };
-const fmtQty = (q, u) => `${Number(q).toLocaleString('nl-NL', { maximumFractionDigits: 2 })} ${Number(q) === 1 ? SINGULAR[u] || u : u}`;
+const fmtNum = (q) => Number(q).toLocaleString('nl-NL', { maximumFractionDigits: 2 });
+const fmtUnit = (q, u) => (Number(q) === 1 ? SINGULAR[u] || u : u);
+const fmtQty = (q, u) => `${fmtNum(q)} ${fmtUnit(q, u)}`;
 const stepFor = (unit) => (unit === 'gram' ? 100 : unit === 'kg' || unit === 'liter' ? 0.5 : 1);
 const durationFor = (cat) => ls.get('vv:durations', {})[cat] ?? CAT[cat]?.months ?? 6;
+const spaceOf = (i) => (SPACE[i.space] ? i.space : 'vriezer'); // oude items zonder locatie = vriezer
+const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 function expiryState(item) {
-  if (!item.bestBefore) return { cls: '', label: '', days: Infinity };
+  if (!item.bestBefore || item.qty <= 0) return { cls: '', label: '', days: Infinity };
   const days = daysUntil(item.bestBefore);
   if (days < 0) return { cls: 'bad', label: days === -1 ? 'gisteren over datum' : `${-days} dgn over datum`, days };
-  if (days === 0) return { cls: 'bad', label: 'vandaag', days };
+  if (days === 0) return { cls: 'bad', label: 'THT vandaag', days };
   if (days <= WARN_DAYS) return { cls: 'warn', label: `nog ${days} dg${days === 1 ? '' : 'n'}`, days };
   return { cls: '', label: `tot ${fmtDate(item.bestBefore)}`, days };
 }
 
+// Hoeveel moet er gekocht worden? (min-voorraad of handmatig op de lijst)
+function needOf(i) {
+  const want = Number(i.want) || 0;
+  const short = (Number(i.min) || 0) - (Number(i.qty) || 0);
+  const snoozed = i.snoozedUntil && i.snoozedUntil > Date.now() && !want;
+  return Math.max(want, snoozed ? 0 : round(short), 0);
+}
+const inStockView = (i) => i.qty > 0 || Number(i.min) > 0;
+
 let toastTimer;
-function toast(msg, action) {
+function toast(msg, actions = []) {
   const el = $('#toast');
   el.innerHTML = `<span>${esc(msg)}</span>`;
-  if (action) {
+  [].concat(actions).filter(Boolean).forEach((a) => {
     const b = document.createElement('button');
-    b.textContent = action.label;
-    b.onclick = () => { el.classList.remove('show'); action.run(); };
+    b.textContent = a.label;
+    b.onclick = () => { el.classList.remove('show'); a.run(); };
     el.append(b);
-  }
+  });
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), action ? 6000 : 2500);
+  toastTimer = setTimeout(() => el.classList.remove('show'), actions.length ? 6000 : 2500);
 }
+const undoAction = (fn) => ({ label: 'Ongedaan', run: fn });
 
 /* ---------------- Huishouden (gedeelde code) ---------------- */
 function resolveHousehold() {
@@ -83,7 +116,7 @@ function resolveHousehold() {
   if (m) {
     ls.set('vv:household', m[1].toLowerCase());
     history.replaceState(null, '', location.pathname + location.search);
-    setTimeout(() => toast('Gekoppeld aan gedeelde vriezer ✔️'), 300);
+    setTimeout(() => toast('Gekoppeld aan gedeelde voorraad ✔️'), 300);
   }
   let hid = ls.get('vv:household');
   if (!hid) { hid = newId(20); ls.set('vv:household', hid); }
@@ -94,52 +127,126 @@ function resolveHousehold() {
 const state = {
   items: [],
   log: [],
+  space: ls.get('vv:space', 'all'),
   filter: 'all',
   search: '',
   sort: ls.get('vv:sort', 'tht'),
+  storeFilter: 'all',
   editingId: null,
   takingId: null,
+  quickId: null,
 };
 let store;
 const me = () => ls.get('vv:name', '') || 'Iemand';
+const byId = (id) => state.items.find((i) => i.id === id);
+
+/* ---------------- Mutaties ---------------- */
+// Logregel toevoegen; snelle herhaalde tikken op hetzelfde product worden samengevoegd.
+async function logChange(entry) {
+  entry = { by: me(), at: Date.now(), ...entry };
+  const last = state.log[0];
+  if (last && last.itemId === entry.itemId && last.type === entry.type && (last.reason || '') === (entry.reason || '')
+      && last.by === entry.by && entry.at - last.at < 2 * 60 * 1000 && last.unit === entry.unit) {
+    const prev = last.qty;
+    await store.updateLog(last.id, { qty: round(prev + entry.qty), at: entry.at });
+    return () => store.updateLog(last.id, { qty: prev });
+  }
+  const id = await store.addLog(entry);
+  return () => store.deleteLog(id);
+}
+const logBase = (i) => ({ itemId: i.id, name: i.name, unit: i.unit, category: i.category, space: spaceOf(i), barcode: i.barcode || '' });
+
+async function changeQty(item, delta, { reason = 'used', toList = false } = {}) {
+  const { id, ...before } = item;
+  const next = round(Math.max(0, item.qty + delta));
+  const restore = () => store.setItem(id, before);
+  let undoLog;
+  if (delta > 0) {
+    const patch = { qty: next, updatedBy: me(), updatedAt: Date.now() };
+    if (item.qty <= 0) Object.assign(patch, freshDates(item), { want: 0 });
+    await store.updateItem(id, patch);
+    undoLog = await logChange({ ...logBase(item), type: 'in', qty: round(next - item.qty) });
+    toast(`${item.name}: nu ${fmtQty(next, item.unit)}`, [undoAction(() => { restore(); undoLog(); })]);
+    return;
+  }
+  const taken = round(item.qty - next);
+  if (taken <= 0) return;
+  if (next > 0 || Number(item.min) > 0) {
+    await store.updateItem(id, { qty: next, updatedBy: me(), updatedAt: Date.now() });
+  } else if (toList) {
+    await store.updateItem(id, { qty: 0, want: WEIGHT_UNITS.includes(item.unit) ? item.qty : 1, updatedBy: me(), updatedAt: Date.now() });
+  } else {
+    await store.deleteItem(id);
+  }
+  undoLog = await logChange({ ...logBase(item), type: 'out', reason, qty: taken });
+  const undo = undoAction(() => { restore(); undoLog(); });
+  if (next > 0) return toast(`${item.name}: nog ${fmtQty(next, item.unit)}`, [undo]);
+  if (Number(item.min) > 0 || toList) return toast(`${item.name} is op · staat op de lijst 🛒`, [undo]);
+  toast(`${item.name} is op`, [undo, { label: '🛒 Op lijst', run: () => store.setItem(id, { ...before, qty: 0, want: 1 }) }]);
+}
+
+function freshDates(item) {
+  const sp = spaceOf(item);
+  return { frozenAt: today(), bestBefore: sp === 'vriezer' ? addMonths(today(), durationFor(item.category)) : '' };
+}
 
 /* ---------------- Render: voorraad ---------------- */
-function renderChips() {
-  const counts = {};
-  state.items.forEach((i) => { counts[i.category] = (counts[i.category] || 0) + 1; });
-  const chips = [{ id: 'all', label: 'Alles', icon: '', n: state.items.length }]
-    .concat(CATEGORIES.filter((c) => counts[c.id]).map((c) => ({ ...c, n: counts[c.id] })));
-  if (state.filter !== 'all' && state.filter !== 'soon' && !counts[state.filter]) state.filter = 'all';
-  $('#chips').innerHTML = chips.map((c) =>
-    `<button class="chip ${state.filter === c.id ? 'active' : ''}" data-filter="${c.id}">${c.icon} ${esc(c.label)}<span class="count">${c.n}</span></button>`
+function itemsInSpace() {
+  return state.items.filter((i) => inStockView(i) && (state.space === 'all' || spaceOf(i) === state.space));
+}
+
+function renderSpaces() {
+  const counts = { all: 0 };
+  state.items.filter(inStockView).forEach((i) => { counts.all++; counts[spaceOf(i)] = (counts[spaceOf(i)] || 0) + 1; });
+  const tabs = [{ id: 'all', short: 'Alles', icon: '🏠' }, ...SPACES];
+  $('#spaces').innerHTML = tabs.map((s) =>
+    `<button class="${state.space === s.id ? 'active' : ''}" data-space="${s.id}"><span>${s.icon}</span>${esc(s.short)}<small>${counts[s.id] || 0}</small></button>`
   ).join('');
+  const cur = SPACE[state.space];
+  if ($('#view-stock').classList.contains('active')) $('#appTitle').textContent = cur ? `${cur.icon} ${cur.label}` : '🏠 Voorraad';
+}
+
+function renderChips() {
+  const list = itemsInSpace();
+  const counts = {};
+  list.forEach((i) => { counts[i.category] = (counts[i.category] || 0) + 1; });
+  if (state.filter in CAT && !counts[state.filter]) state.filter = 'all';
+  const chips = [{ id: 'all', label: 'Alles', icon: '', n: list.length }]
+    .concat(CATEGORIES.filter((c) => counts[c.id]).map((c) => ({ ...c, n: counts[c.id] })));
+  $('#chips').innerHTML = chips.length > 2 ? chips.map((c) =>
+    `<button class="chip ${state.filter === c.id ? 'active' : ''}" data-filter="${c.id}">${c.icon} ${esc(c.label)}<span class="count">${c.n}</span></button>`
+  ).join('') : '';
 }
 
 function renderSummary() {
+  const list = itemsInSpace();
   let soon = 0, over = 0;
-  state.items.forEach((i) => { const e = expiryState(i); if (e.cls === 'bad') over++; else if (e.cls === 'warn') soon++; });
-  const parts = [`<span class="pill">${state.items.length} product${state.items.length === 1 ? '' : 'en'}</span>`];
+  list.forEach((i) => { const e = expiryState(i); if (e.cls === 'bad') over++; else if (e.cls === 'warn') soon++; });
+  const low = list.filter((i) => needOf(i) > 0).length;
+  const parts = [`<span class="pill">${list.length} product${list.length === 1 ? '' : 'en'}</span>`];
   if (over) parts.push(`<button class="pill bad" data-filter="soon">⚠️ ${over} over datum</button>`);
-  if (soon) parts.push(`<button class="pill warn" data-filter="soon">⏰ ${soon} binnen ${WARN_DAYS} dagen</button>`);
+  if (soon) parts.push(`<button class="pill warn" data-filter="soon">⏰ ${soon} binnen ${WARN_DAYS} dgn</button>`);
+  if (low) parts.push(`<button class="pill" data-goto="shop">🛒 ${low} bijna op</button>`);
   if (state.filter === 'soon') parts.push(`<button class="pill" data-filter="all">✕ filter wissen</button>`);
   $('#summary').innerHTML = parts.join('');
 }
 
 function filteredItems() {
   const q = state.search.trim().toLowerCase();
-  let list = state.items.filter((i) => {
+  const list = itemsInSpace().filter((i) => {
     if (state.filter === 'soon' && expiryState(i).days > WARN_DAYS) return false;
-    if (state.filter !== 'all' && state.filter !== 'soon' && i.category !== state.filter) return false;
-    if (q && !`${i.name} ${i.note || ''} ${i.location || ''}`.toLowerCase().includes(q)) return false;
+    if (state.filter in CAT && i.category !== state.filter) return false;
+    if (q && !`${i.name} ${i.note || ''} ${i.location || ''} ${i.barcode || ''}`.toLowerCase().includes(q)) return false;
     return true;
   });
   const byName = (a, b) => a.name.localeCompare(b.name, 'nl');
-  const byTht = (a, b) => (a.bestBefore || '9999').localeCompare(b.bestBefore || '9999') || byName(a, b);
+  const byTht = (a, b) => (a.qty > 0 ? 0 : 1) - (b.qty > 0 ? 0 : 1) || (a.bestBefore || '9999').localeCompare(b.bestBefore || '9999') || byName(a, b);
+  const placeKey = (i) => `${SPACES.findIndex((s) => s.id === spaceOf(i))}|${i.location || '~'}`;
   const sorters = {
     tht: byTht,
     name: byName,
     recent: (a, b) => (b.createdAt || 0) - (a.createdAt || 0),
-    location: (a, b) => (a.location || '~').localeCompare(b.location || '~', 'nl', { numeric: true }) || byTht(a, b),
+    location: (a, b) => placeKey(a).localeCompare(placeKey(b), 'nl', { numeric: true }) || byName(a, b),
   };
   return list.sort(sorters[state.sort] || byTht);
 }
@@ -147,20 +254,37 @@ function filteredItems() {
 function itemHTML(i) {
   const c = CAT[i.category] || CAT.overig;
   const e = expiryState(i);
-  const meta = [fmtQty(i.qty, i.unit), i.location, `in ${fmtDate(i.frozenAt)}`].filter(Boolean).map(esc).join(' · ');
-  return `<li class="item ${e.cls}">
+  const sp = SPACE[spaceOf(i)];
+  const dateLabel = spaceOf(i) === 'vriezer' ? 'in' : 'sinds';
+  const meta = [
+    state.space === 'all' ? `${sp.icon} ${sp.short}` : '',
+    i.location,
+    i.qty > 0 && i.frozenAt ? `${dateLabel} ${fmtDate(i.frozenAt)}` : '',
+  ].filter(Boolean).map(esc).join(' · ');
+  const need = needOf(i);
+  const badges = [
+    e.label ? `<span class="badge ${e.cls}">${esc(e.label)}</span>` : '',
+    i.qty <= 0 ? `<span class="badge bad">op</span>` : '',
+    need > 0 ? `<span class="badge info">🛒 op de lijst</span>` : (Number(i.min) > 0 ? `<span class="badge muted">min ${fmtNum(i.min)}</span>` : ''),
+  ].join('');
+  return `<li class="item ${e.cls} ${i.qty <= 0 ? 'zero' : ''}">
     <div class="item-icon" aria-hidden="true">${c.icon}</div>
     <button class="item-main" data-edit="${i.id}">
       <div class="item-name">${esc(i.name)}</div>
-      <div class="item-meta">${meta}</div>
+      ${meta ? `<div class="item-meta">${meta}</div>` : ''}
       ${i.note ? `<div class="item-note">${esc(i.note)}</div>` : ''}
-      ${e.label ? `<span class="badge ${e.cls}">${esc(e.label)}</span>` : ''}
+      ${badges ? `<div class="badges">${badges}</div>` : ''}
     </button>
-    <button class="take-btn" data-take="${i.id}" aria-label="${esc(i.name)} eruit halen">Eruit</button>
+    <div class="qty-ctl">
+      <button data-dec="${i.id}" aria-label="${esc(i.name)} min één" ${i.qty <= 0 ? 'disabled' : ''}>−</button>
+      <div class="qty"><b>${fmtNum(i.qty)}</b><small>${esc(fmtUnit(i.qty, i.unit))}</small></div>
+      <button data-inc="${i.id}" aria-label="${esc(i.name)} plus één">+</button>
+    </div>
   </li>`;
 }
 
 function renderStock() {
+  renderSpaces();
   renderChips();
   renderSummary();
   const list = filteredItems();
@@ -168,18 +292,18 @@ function renderStock() {
   if (state.sort === 'location') {
     let cur;
     list.forEach((i) => {
-      const loc = i.location || 'Geen plek';
+      const sp = SPACE[spaceOf(i)];
+      const loc = `${state.space === 'all' ? `${sp.icon} ${sp.short} · ` : ''}${i.location || 'Geen plek'}`;
       if (loc !== cur) { cur = loc; html += `<li class="group-title">${esc(loc)}</li>`; }
       html += itemHTML(i);
     });
   } else {
     html = list.map(itemHTML).join('');
   }
-  $('#stockList').innerHTML = html;
-  $('#emptyStock').hidden = state.items.length > 0;
-  if (state.items.length && !list.length) {
-    $('#stockList').innerHTML = `<li class="empty"><p class="muted">Niets gevonden.</p></li>`;
-  }
+  const total = itemsInSpace().length;
+  $('#stockList').innerHTML = total && !list.length ? `<li class="empty"><p class="muted">Niets gevonden.</p></li>` : html;
+  $('#emptyStock').hidden = total > 0;
+  $('#emptyText').textContent = SPACE[state.space] ? `De ${SPACE[state.space].label.toLowerCase()} is (nog) leeg.` : 'Hier ligt (nog) niets.';
   renderDatalists();
 }
 
@@ -188,14 +312,101 @@ function renderDatalists() {
   [...state.log].reverse().forEach((l) => names.set(l.name.toLowerCase(), l.name));
   state.items.forEach((i) => names.set(i.name.toLowerCase(), i.name));
   $('#nameList').innerHTML = [...names.values()].sort((a, b) => a.localeCompare(b, 'nl')).map((n) => `<option value="${esc(n)}">`).join('');
-  const locs = new Set(['Lade 1', 'Lade 2', 'Lade 3']);
-  state.items.forEach((i) => i.location && locs.add(i.location));
+  const sp = $('#itemForm').space?.value || 'vriezer';
+  const locs = new Set(sp === 'vriezer' ? ['Lade 1', 'Lade 2', 'Lade 3'] : []);
+  state.items.forEach((i) => i.location && spaceOf(i) === sp && locs.add(i.location));
   $('#locationList').innerHTML = [...locs].sort((a, b) => a.localeCompare(b, 'nl', { numeric: true })).map((n) => `<option value="${esc(n)}">`).join('');
+  $('#storeList').innerHTML = allStores().map((n) => `<option value="${esc(n)}">`).join('');
 }
+function allStores() {
+  const s = new Set(DEFAULT_STORES);
+  state.items.forEach((i) => i.store && s.add(i.store));
+  return [...s].sort((a, b) => a.localeCompare(b, 'nl'));
+}
+
+/* ---------------- Render: boodschappen ---------------- */
+function shopItems() {
+  return state.items.filter((i) => needOf(i) > 0);
+}
+function renderShop() {
+  const all = shopItems();
+  const badge = $('#shopBadge');
+  badge.textContent = all.length; badge.hidden = !all.length;
+
+  const stores = [...new Set(all.map((i) => i.store || ''))];
+  if (state.storeFilter !== 'all' && !stores.includes(state.storeFilter)) state.storeFilter = 'all';
+  $('#storeChips').innerHTML = stores.length > 1 ? [{ id: 'all', label: 'Alle winkels' }, ...stores.sort().map((s) => ({ id: s, label: s || 'Geen winkel' }))]
+    .map((s) => `<button class="chip ${state.storeFilter === s.id ? 'active' : ''}" data-store="${esc(s.id)}">${esc(s.label)}</button>`).join('') : '';
+
+  const list = all.filter((i) => state.storeFilter === 'all' || (i.store || '') === state.storeFilter)
+    .sort((a, b) => (a.store || '~').localeCompare(b.store || '~', 'nl') || a.name.localeCompare(b.name, 'nl'));
+  let html = '', cur;
+  list.forEach((i) => {
+    const st = i.store || 'Geen winkel';
+    if (stores.length > 1 && state.storeFilter === 'all' && st !== cur) { cur = st; html += `<li class="group-title">${esc(st)}</li>`; }
+    const need = needOf(i);
+    const sp = SPACE[spaceOf(i)];
+    const why = Number(i.min) > 0 && !(Number(i.want) > 0) ? `nog ${fmtNum(i.qty)} in huis, min ${fmtNum(i.min)}` : (i.qty > 0 ? `nog ${fmtNum(i.qty)} in huis` : 'op');
+    html += `<li class="item shop">
+      <button class="check-btn" data-bought="${i.id}" aria-label="${esc(i.name)} gekocht">✓</button>
+      <button class="item-main" data-edit="${i.id}">
+        <div class="item-name">${esc(i.name)} <span class="muted">· ${esc(fmtQty(need, i.unit))}</span></div>
+        <div class="item-meta">${sp.icon} ${esc(sp.short)} · ${esc(why)}</div>
+      </button>
+      <button class="icon-btn" data-skip="${i.id}" aria-label="Niet nodig" title="Niet nodig">✕</button>
+    </li>`;
+  });
+  $('#shopList').innerHTML = html;
+  $('#emptyShop').hidden = all.length > 0;
+  $('#shareList').hidden = !all.length;
+}
+
+async function markBought(item) {
+  const need = needOf(item);
+  const { id, ...before } = item;
+  const patch = { qty: round(item.qty + need), want: 0, snoozedUntil: 0, updatedBy: me(), updatedAt: Date.now() };
+  if (item.qty <= 0) Object.assign(patch, freshDates(item));
+  await store.updateItem(id, patch);
+  const undoLog = await logChange({ ...logBase(item), type: 'in', reason: 'bought', qty: need });
+  toast(`${item.name} gekocht → ${SPACE[spaceOf(item)].in}`, [undoAction(() => { store.setItem(id, before); undoLog(); })]);
+}
+
+async function skipItem(item) {
+  const { id, ...before } = item;
+  const belowMin = Number(item.min) > 0 && item.qty < Number(item.min);
+  if (item.qty <= 0 && !(Number(item.min) > 0)) await store.deleteItem(id);
+  else await store.updateItem(id, { want: 0, ...(belowMin ? { snoozedUntil: Date.now() + SNOOZE_DAYS * 86400000 } : {}) });
+  toast(belowMin ? `${item.name} ${SNOOZE_DAYS} dagen van de lijst` : `${item.name} van de lijst`, [undoAction(() => store.setItem(id, before))]);
+}
+
+$('#shopAdd').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = e.target.name.value.trim();
+  if (!name) return;
+  e.target.name.value = '';
+  const existing = state.items.find((i) => sameName(i.name, name));
+  if (existing) {
+    await store.updateItem(existing.id, { want: Math.max(needOf(existing), 0) + stepFor(existing.unit), snoozedUntil: 0 });
+  } else {
+    const prev = state.log.find((l) => sameName(l.name, name));
+    await store.addItem({
+      name, qty: 0, want: 1, unit: prev?.unit || 'stuks', category: prev?.category || 'overig',
+      space: prev?.space || (SPACE[state.space] ? state.space : 'kast'), location: '', frozenAt: today(), bestBefore: '',
+      note: '', min: 0, store: '', barcode: prev?.barcode || '', addedBy: me(), createdAt: Date.now(),
+    });
+  }
+  toast(`${name} staat op de lijst`);
+});
+
+$('#shareList').addEventListener('click', async () => {
+  const lines = shopItems().sort((a, b) => (a.store || '~').localeCompare(b.store || '~')).map((i) => `• ${i.name} (${fmtQty(needOf(i), i.unit)})${i.store ? ` – ${i.store}` : ''}`);
+  const text = `🛒 Boodschappen\n${lines.join('\n')}`;
+  if (navigator.share) { try { await navigator.share({ text }); } catch {} }
+  else { await navigator.clipboard?.writeText(text); toast('Lijst gekopieerd'); }
+});
 
 /* ---------------- Render: geschiedenis ---------------- */
 function renderLog() {
-  const ul = $('#logList');
   $('#emptyLog').hidden = state.log.length > 0;
   let html = '', curDay;
   state.log.forEach((l) => {
@@ -207,19 +418,21 @@ function renderLog() {
         : d.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long' });
       html += `<li class="group-title">${esc(label)}</li>`;
     }
-    const icon = l.type === 'in' ? '⬇️' : l.reason === 'trashed' ? '🗑️' : '⬆️';
-    const verb = l.type === 'in' ? 'legde in de vriezer' : l.reason === 'trashed' ? 'gooide weg' : 'haalde eruit';
+    const sp = SPACE[l.space] || SPACE.vriezer;
+    const [icon, verb] = l.type === 'in'
+      ? (l.reason === 'bought' ? ['🛒', `kocht → ${sp.short.toLowerCase()}`] : ['⬇️', `legde ${sp.in}`])
+      : (l.reason === 'trashed' ? ['🗑️', 'gooide weg'] : ['⬆️', `pakte ${sp.out}`]);
     const time = d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
     html += `<li class="item">
       <div class="item-icon">${icon}</div>
       <div class="item-main">
         <div class="item-name">${esc(l.name)} <span class="muted">· ${esc(fmtQty(l.qty, l.unit))}</span></div>
-        <div class="when">${esc(l.by)} ${verb} · ${time}</div>
+        <div class="when">${esc(l.by)} ${esc(verb)} · ${time}</div>
       </div>
       <button class="readd" data-readd="${l.id}" aria-label="Opnieuw toevoegen" title="Opnieuw toevoegen">＋</button>
     </li>`;
   });
-  ul.innerHTML = html;
+  $('#logList').innerHTML = html;
 }
 
 /* ---------------- Toevoegen / bewerken ---------------- */
@@ -227,14 +440,41 @@ const itemForm = $('#itemForm');
 let thtTouched = false;
 
 function fillSelects() {
-  itemForm.category.innerHTML = CATEGORIES.map((c) => `<option value="${c.id}">${c.icon} ${esc(c.label)}</option>`).join('');
   itemForm.unit.innerHTML = UNITS.map((u) => `<option>${u}</option>`).join('');
+  $('#spaceSeg').innerHTML = SPACES.map((s) =>
+    `<label><input type="radio" name="space" value="${s.id}"><span>${s.icon} ${esc(s.short)}</span></label>`).join('');
+}
+function fillCategories(space, selected) {
+  const ids = space === 'vriezer' ? FREEZER_CATS : CATEGORIES.map((c) => c.id);
+  if (selected && !ids.includes(selected)) ids.push(selected);
+  itemForm.category.innerHTML = ids.map((id) => `<option value="${id}">${CAT[id].icon} ${esc(CAT[id].label)}</option>`).join('');
+  itemForm.category.value = selected && ids.includes(selected) ? selected : 'overig';
+}
+
+function onSpaceChange() {
+  const sp = itemForm.space.value || 'vriezer';
+  fillCategories(sp, itemForm.category.value);
+  $('#dateLabel').textContent = sp === 'vriezer' ? 'In vriezer' : 'Toegevoegd';
+  itemForm.location.placeholder = SPACE[sp].loc;
+  renderDatalists();
+  suggestTht();
 }
 
 function suggestTht() {
+  const sp = itemForm.space.value;
+  if (sp !== 'vriezer') {
+    $('#thtHint').textContent = '(van verpakking)';
+    if (!thtTouched) itemForm.bestBefore.value = '';
+    return;
+  }
   const months = durationFor(itemForm.category.value);
   $('#thtHint').textContent = `(± ${months} mnd)`;
   if (!thtTouched && itemForm.frozenAt.value) itemForm.bestBefore.value = addMonths(itemForm.frozenAt.value, months);
+}
+
+function setBarcodeInfo(code) {
+  itemForm.barcode.value = code || '';
+  $('#barcodeInfo').textContent = code ? `Barcode: ${code}` : '';
 }
 
 function openItem(item = null, prefill = null) {
@@ -242,33 +482,45 @@ function openItem(item = null, prefill = null) {
   const d = item || prefill || {};
   $('#itemTitle').textContent = item ? 'Bewerken' : 'Toevoegen';
   itemForm.name.value = d.name || '';
-  itemForm.qty.value = d.qty ?? 1;
+  itemForm.qty.value = item ? item.qty : d.qty ?? 1;
   itemForm.unit.value = d.unit || 'stuks';
-  itemForm.category.value = d.category || (state.filter in CAT ? state.filter : 'overig');
+  itemForm.space.value = item ? spaceOf(item) : d.space || (SPACE[state.space] ? state.space : 'vriezer');
+  fillCategories(itemForm.space.value, d.category || (state.filter in CAT ? state.filter : 'overig'));
   itemForm.location.value = d.location || '';
-  itemForm.frozenAt.value = item ? item.frozenAt : today();
+  itemForm.frozenAt.value = item?.frozenAt || today();
   itemForm.bestBefore.value = item ? item.bestBefore || '' : '';
+  itemForm.min.value = Number(d.min) > 0 ? d.min : '';
+  itemForm.store.value = d.store || '';
   itemForm.note.value = d.note || '';
+  setBarcodeInfo(d.barcode);
   thtTouched = !!item;
-  suggestTht();
+  onSpaceChange();
   $('#deleteItem').hidden = !item;
+  $('#takeFromEdit').hidden = !item || item.qty <= 0;
   $('#itemDialog').showModal();
   if (!item && !prefill) setTimeout(() => itemForm.name.focus(), 50);
 }
 
-// Bekend product gekozen → categorie/eenheid/plek overnemen
+// Bekend product gekozen → eigenschappen overnemen
+function knownProduct({ name, barcode }) {
+  const match = (x) => (barcode && x.barcode === barcode) || (name && sameName(x.name, name));
+  return state.items.find(match) || state.log.find((l) => match(l) && l.category);
+}
 itemForm.name.addEventListener('change', () => {
   if (state.editingId) return;
-  const n = itemForm.name.value.trim().toLowerCase();
-  const prev = state.items.find((i) => i.name.toLowerCase() === n)
-    || state.log.find((l) => l.name.toLowerCase() === n && l.category);
-  if (prev) {
-    itemForm.category.value = prev.category || itemForm.category.value;
-    itemForm.unit.value = prev.unit || itemForm.unit.value;
-    if (prev.location && !itemForm.location.value) itemForm.location.value = prev.location;
-    suggestTht();
-  }
+  const prev = knownProduct({ name: itemForm.name.value });
+  if (!prev) return;
+  if (prev.space) itemForm.space.value = prev.space;
+  onSpaceChange();
+  if (prev.category) { fillCategories(itemForm.space.value, prev.category); }
+  itemForm.unit.value = prev.unit || itemForm.unit.value;
+  if (prev.location && !itemForm.location.value) itemForm.location.value = prev.location;
+  if (prev.store && !itemForm.store.value) itemForm.store.value = prev.store;
+  if (Number(prev.min) > 0 && !itemForm.min.value) itemForm.min.value = prev.min;
+  if (prev.barcode && !itemForm.barcode.value) setBarcodeInfo(prev.barcode);
+  suggestTht();
 });
+$('#spaceSeg').addEventListener('change', onSpaceChange);
 itemForm.category.addEventListener('change', suggestTht);
 itemForm.frozenAt.addEventListener('change', suggestTht);
 itemForm.bestBefore.addEventListener('input', () => { thtTouched = !!itemForm.bestBefore.value; });
@@ -280,71 +532,210 @@ itemForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const data = {
     name: itemForm.name.value.trim(),
-    qty: Number(itemForm.qty.value) || 0,
+    qty: round(Number(itemForm.qty.value) || 0),
     unit: itemForm.unit.value,
+    space: itemForm.space.value || 'vriezer',
     category: itemForm.category.value,
     location: itemForm.location.value.trim(),
     frozenAt: itemForm.frozenAt.value,
     bestBefore: itemForm.bestBefore.value || '',
+    min: Math.max(0, Number(itemForm.min.value) || 0),
+    store: itemForm.store.value.trim(),
+    barcode: itemForm.barcode.value,
     note: itemForm.note.value.trim(),
   };
-  if (!data.name || data.qty <= 0) return;
+  if (!data.name) return;
+  const editing = byId(state.editingId);
+  if (!editing && data.qty <= 0 && !data.min) return;
   $('#itemDialog').close();
-  if (state.editingId) {
-    await store.updateItem(state.editingId, { ...data, updatedBy: me(), updatedAt: Date.now() });
+  if (editing) {
+    await store.updateItem(editing.id, { ...data, ...(data.qty > 0 ? { want: 0 } : {}), updatedBy: me(), updatedAt: Date.now() });
+    const diff = round(data.qty - editing.qty);
+    if (diff) await logChange({ ...logBase({ ...editing, ...data }), type: diff > 0 ? 'in' : 'out', reason: 'used', qty: Math.abs(diff) });
     toast('Opgeslagen');
-  } else {
-    const id = await store.addItem({ ...data, addedBy: me(), createdAt: Date.now() });
-    await store.addLog({ type: 'in', itemId: id, name: data.name, qty: data.qty, unit: data.unit, category: data.category, by: me(), at: Date.now() });
-    toast(`${data.name} toegevoegd`);
+    return;
   }
+  // Nieuw: bestaat hetzelfde product al op dezelfde plek zonder voorraad (bijv. op de lijst)? Dan aanvullen.
+  const twin = state.items.find((i) => sameName(i.name, data.name) && spaceOf(i) === data.space && i.qty <= 0);
+  let id;
+  if (twin) {
+    id = twin.id;
+    await store.updateItem(id, { ...data, min: data.min || twin.min || 0, want: 0, snoozedUntil: 0, updatedBy: me(), updatedAt: Date.now() });
+  } else {
+    id = await store.addItem({ ...data, want: 0, addedBy: me(), createdAt: Date.now() });
+  }
+  if (data.qty > 0) await logChange({ ...logBase({ id, ...data }), type: 'in', qty: data.qty });
+  toast(`${data.name} toegevoegd ${SPACE[data.space].in}`);
 });
 
 $('#deleteItem').addEventListener('click', async () => {
-  const item = state.items.find((i) => i.id === state.editingId);
-  if (!item || !confirm(`"${item.name}" verwijderen zonder het als uitname te registreren?\n\n(Tip: gebruik "Eruit" als je het hebt opgegeten of weggegooid.)`)) return;
+  const item = byId(state.editingId);
+  if (!item || !confirm(`"${item.name}" helemaal verwijderen?\n\n(Tip: gebruik "Eruit halen" als je het hebt opgemaakt of weggegooid.)`)) return;
   $('#itemDialog').close();
   const { id, ...data } = item;
   await store.deleteItem(id);
-  toast('Verwijderd', { label: 'Ongedaan maken', run: () => store.setItem(id, data) });
+  toast('Verwijderd', [undoAction(() => store.setItem(id, data))]);
+});
+$('#takeFromEdit').addEventListener('click', () => {
+  const item = byId(state.editingId);
+  $('#itemDialog').close();
+  if (item) openTake(item);
 });
 
-/* ---------------- Uit de vriezer ---------------- */
+/* ---------------- Eruit halen ---------------- */
 const takeForm = $('#takeForm');
 function openTake(item) {
   state.takingId = item.id;
   $('#takeTitle').textContent = `${item.name} eruit`;
-  $('#takeInfo').textContent = `Er ligt nu ${fmtQty(item.qty, item.unit)}${item.location ? ` in ${item.location}` : ''}.`;
+  $('#takeInfo').textContent = `Er ligt nu ${fmtQty(item.qty, item.unit)} ${SPACE[spaceOf(item)].in}${item.location ? ` (${item.location})` : ''}.`;
   const step = stepFor(item.unit);
   takeForm.qty.max = item.qty;
-  takeForm.qty.step = 'any';
   takeForm.qty.value = item.qty <= step ? item.qty : step;
   takeForm.reason.value = 'used';
+  takeForm.toList.checked = false;
+  $('#toListRow').hidden = Number(item.min) > 0;
   $('#takeDialog').showModal();
 }
-
 async function takeOut(qty) {
-  const item = state.items.find((i) => i.id === state.takingId);
+  const item = byId(state.takingId);
   if (!item) return;
   qty = Math.min(Math.max(Number(qty) || 0, 0), item.qty);
   if (qty <= 0) return;
   $('#takeDialog').close();
-  const reason = takeForm.reason.value;
-  const { id, ...before } = item;
-  const rest = Math.round((item.qty - qty) * 1000) / 1000;
-  if (rest > 0) await store.updateItem(id, { qty: rest, updatedBy: me(), updatedAt: Date.now() });
-  else await store.deleteItem(id);
-  const logId = await store.addLog({ type: 'out', reason, itemId: id, name: item.name, qty, unit: item.unit, category: item.category, by: me(), at: Date.now() });
-  toast(rest > 0 ? `${fmtQty(qty, item.unit)} ${item.name} eruit · nog ${fmtQty(rest, item.unit)}` : `${item.name} is op`, {
-    label: 'Ongedaan maken',
-    run: async () => { await store.setItem(id, before); await store.deleteLog(logId); },
-  });
+  await changeQty(item, -qty, { reason: takeForm.reason.value, toList: takeForm.toList.checked });
 }
 takeForm.addEventListener('submit', (e) => { e.preventDefault(); takeOut(takeForm.qty.value); });
-$('#takeAll').addEventListener('click', () => {
-  const item = state.items.find((i) => i.id === state.takingId);
-  if (item) takeOut(item.qty);
+$('#takeAll').addEventListener('click', () => { const item = byId(state.takingId); if (item) takeOut(item.qty); });
+
+/* ---------------- Barcode ---------------- */
+let scanStream = null, scanTimer = null;
+async function getDetector() {
+  if ('BarcodeDetector' in window) {
+    try {
+      const formats = await window.BarcodeDetector.getSupportedFormats();
+      if (formats.includes('ean_13')) return new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
+    } catch {}
+  }
+  const { BarcodeDetector } = await import('./vendor/barcode.js');
+  return new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] });
+}
+function stopScan() {
+  clearTimeout(scanTimer);
+  scanStream?.getTracks().forEach((t) => t.stop());
+  scanStream = null;
+}
+let onScanned = null;
+async function openScanner(cb) {
+  onScanned = cb;
+  const dlg = $('#scanDialog');
+  const video = $('#scanVideo');
+  $('#scanMsg').textContent = 'Camera starten…';
+  $('#manualCode').code.value = '';
+  dlg.showModal();
+  try {
+    const [detector, stream] = await Promise.all([
+      getDetector(),
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false }),
+    ]);
+    if (!dlg.open) { stream.getTracks().forEach((t) => t.stop()); return; }
+    scanStream = stream;
+    video.srcObject = stream;
+    await video.play();
+    $('#scanMsg').textContent = 'Richt de camera op de barcode…';
+    const tick = async () => {
+      if (!scanStream) return;
+      try {
+        const codes = await detector.detect(video);
+        if (codes.length) return finishScan(codes[0].rawValue);
+      } catch {}
+      scanTimer = setTimeout(tick, 200);
+    };
+    tick();
+  } catch (err) {
+    console.warn(err);
+    $('#scanMsg').textContent = 'Camera niet beschikbaar. Typ de barcode hieronder in.';
+  }
+}
+function finishScan(code) {
+  code = String(code || '').trim();
+  if (!code) return;
+  navigator.vibrate?.(60);
+  stopScan();
+  $('#scanDialog').close();
+  onScanned?.(code);
+}
+$('#scanDialog').addEventListener('close', stopScan);
+$('#manualCode').addEventListener('submit', (e) => { e.preventDefault(); finishScan(e.target.code.value.replace(/\D/g, '')); });
+
+async function lookupBarcode(code) {
+  const cache = ls.get('vv:barcodes', {});
+  if (cache[code]) return cache[code];
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 6000);
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name_nl,product_name,generic_name_nl,brands`, { signal: ctrl.signal });
+    clearTimeout(t);
+    const data = await res.json();
+    const p = data?.product;
+    if (!p) return null;
+    let name = (p.product_name_nl || p.product_name || p.generic_name_nl || '').trim();
+    const brand = (p.brands || '').split(',')[0].trim();
+    if (brand && name && !name.toLowerCase().includes(brand.toLowerCase())) name = `${brand} ${name}`;
+    if (!name) return null;
+    cache[code] = { name };
+    ls.set('vv:barcodes', cache);
+    return cache[code];
+  } catch { return null; }
+}
+
+// Scannen vanuit de voorraad: bekend → snelle actie, onbekend → toevoegen
+$('#scanBtn').addEventListener('click', () => openScanner(async (code) => {
+  const inStock = state.items.find((i) => i.barcode === code && (state.space === 'all' || spaceOf(i) === state.space))
+    || state.items.find((i) => i.barcode === code);
+  if (inStock) return openQuick(inStock);
+  const prev = knownProduct({ barcode: code });
+  if (prev) return openItem(null, { ...prev, qty: 1, barcode: code, location: prev.location || '' });
+  toast('Product opzoeken…');
+  const found = await lookupBarcode(code);
+  openItem(null, { name: found?.name || '', barcode: code, qty: 1 });
+  if (!found) { toast('Onbekende barcode: vul de naam zelf in'); setTimeout(() => itemForm.name.focus(), 50); }
+}));
+$('#formScan').addEventListener('click', () => {
+  const wasOpen = $('#itemDialog').open;
+  openScanner(async (code) => {
+    setBarcodeInfo(code);
+    if (!itemForm.name.value.trim()) {
+      const prev = knownProduct({ barcode: code });
+      const found = prev || await lookupBarcode(code);
+      if (found?.name) { itemForm.name.value = found.name; itemForm.name.dispatchEvent(new Event('change')); }
+      else toast('Onbekende barcode: vul de naam zelf in');
+    }
+    if (wasOpen && !$('#itemDialog').open) $('#itemDialog').showModal();
+  });
 });
+
+function openQuick(item) {
+  state.quickId = item.id;
+  $('#quickTitle').textContent = item.name;
+  $('#quickInfo').textContent = `${fmtQty(item.qty, item.unit)} ${SPACE[spaceOf(item)].in}${item.location ? ` (${item.location})` : ''}`;
+  $('#quickDialog [data-quick="dec"]').disabled = item.qty <= 0;
+  $('#quickDialog').showModal();
+}
+$('#quickDialog').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-quick]');
+  if (!b) return;
+  const item = byId(state.quickId);
+  $('#quickDialog').close();
+  if (!item) return;
+  if (b.dataset.quick === 'inc') changeQty(item, stepFor(item.unit));
+  if (b.dataset.quick === 'dec') decrement(item);
+  if (b.dataset.quick === 'edit') openItem(item);
+});
+
+function decrement(item) {
+  if (WEIGHT_UNITS.includes(item.unit)) return openTake(item);
+  changeQty(item, -1);
+}
 
 /* ---------------- Steppers & dialogen ---------------- */
 document.addEventListener('click', (e) => {
@@ -352,39 +743,57 @@ document.addEventListener('click', (e) => {
   if (step) {
     const input = step.parentElement.querySelector('input');
     const form = step.closest('form');
-    const unit = form === itemForm ? itemForm.unit.value : state.items.find((i) => i.id === state.takingId)?.unit;
-    const s = stepFor(unit) * Number(step.dataset.step);
-    let v = Math.round(((Number(input.value) || 0) + s) * 1000) / 1000;
+    const unit = form === itemForm ? itemForm.unit.value : byId(state.takingId)?.unit;
+    let v = round((Number(input.value) || 0) + stepFor(unit) * Number(step.dataset.step));
     v = Math.max(v, 0);
     if (input.max) v = Math.min(v, Number(input.max));
     input.value = v;
     return;
   }
-  if (e.target.closest('[data-close]')) e.target.closest('dialog').close();
+  if (e.target.closest('[data-close]')) { e.target.closest('dialog').close(); return; }
+  const f = e.target.closest('[data-filter]');
+  if (f) { state.filter = f.dataset.filter; renderStock(); return; }
+  const g = e.target.closest('[data-goto]');
+  if (g) showView(g.dataset.goto);
 });
-// Tik op achtergrond sluit sheet
 $$('dialog.sheet').forEach((d) => d.addEventListener('click', (e) => {
   if (e.target === d && d.id !== 'welcomeDialog') d.close();
 }));
 
 /* ---------------- Lijst-interactie ---------------- */
 $('#stockList').addEventListener('click', (e) => {
-  const take = e.target.closest('[data-take]');
-  if (take) return openTake(state.items.find((i) => i.id === take.dataset.take));
+  const dec = e.target.closest('[data-dec]');
+  if (dec) return decrement(byId(dec.dataset.dec));
+  const inc = e.target.closest('[data-inc]');
+  if (inc) { const i = byId(inc.dataset.inc); return changeQty(i, stepFor(i.unit)); }
   const edit = e.target.closest('[data-edit]');
-  if (edit) openItem(state.items.find((i) => i.id === edit.dataset.edit));
+  if (edit) openItem(byId(edit.dataset.edit));
+});
+$('#shopList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-bought]');
+  if (b) return markBought(byId(b.dataset.bought));
+  const s = e.target.closest('[data-skip]');
+  if (s) return skipItem(byId(s.dataset.skip));
+  const edit = e.target.closest('[data-edit]');
+  if (edit) openItem(byId(edit.dataset.edit));
+});
+$('#storeChips').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-store]');
+  if (c) { state.storeFilter = c.dataset.store; renderShop(); }
 });
 $('#logList').addEventListener('click', (e) => {
   const b = e.target.closest('[data-readd]');
   if (!b) return;
   const l = state.log.find((x) => x.id === b.dataset.readd);
-  const existing = state.items.find((i) => i.name.toLowerCase() === l.name.toLowerCase());
-  openItem(null, { name: l.name, qty: l.qty, unit: l.unit, category: l.category || existing?.category, location: existing?.location });
+  const existing = state.items.find((i) => sameName(i.name, l.name));
+  openItem(null, { name: l.name, qty: l.qty, unit: l.unit, category: l.category || existing?.category, space: l.space || existing?.space,
+    location: existing?.location, store: existing?.store, min: existing?.min, barcode: l.barcode || existing?.barcode });
 });
-document.addEventListener('click', (e) => {
-  const f = e.target.closest('[data-filter]');
-  if (!f) return;
-  state.filter = f.dataset.filter;
+$('#spaces').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-space]');
+  if (!b) return;
+  state.space = b.dataset.space; state.filter = 'all';
+  ls.set('vv:space', state.space);
   renderStock();
 });
 $('#search').addEventListener('input', (e) => { state.search = e.target.value; renderStock(); });
@@ -396,7 +805,9 @@ $('#fab').addEventListener('click', () => openItem());
 function showView(name) {
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
   $$('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
-  $('#fab').hidden = name === 'settings';
+  $('#fab').hidden = name !== 'stock';
+  $('#appTitle').textContent = { shop: '🛒 Boodschappen', log: '📜 Geschiedenis', settings: '⚙️ Instellingen' }[name] || '';
+  if (name === 'stock') renderSpaces();
   window.scrollTo(0, 0);
 }
 $$('.tabbar button').forEach((b) => b.addEventListener('click', () => showView(b.dataset.view)));
@@ -410,13 +821,13 @@ function renderSettings(hid) {
   const block = $('#shareBlock');
   if (store.mode === 'cloud') {
     block.innerHTML = `
-      <p class="small">Stuur deze link naar je partner. Open hem op de telefoon van je partner en jullie delen dezelfde vriezer – wijzigingen zie je direct.</p>
+      <p class="small">Stuur deze link naar je partner. Open hem op de telefoon van je partner en jullie delen dezelfde voorraad – wijzigingen zie je direct.</p>
       <div class="code">${esc(link)}</div>
       <button id="shareLink" class="btn primary block">📤 Deel link</button>
       <button id="joinCode" class="btn secondary block">🔗 Koppel met andere link/code</button>
       <p class="muted small">Houd de link privé: iedereen met de link kan de voorraad zien en aanpassen.</p>`;
     $('#shareLink').onclick = async () => {
-      const data = { title: 'Onze vriezer', text: 'Hier is de link naar onze vriezer-voorraad:', url: link };
+      const data = { title: 'Onze voorraad', text: 'Hier is de link naar onze voorraad:', url: link };
       if (navigator.share) { try { await navigator.share(data); } catch {} }
       else { await navigator.clipboard?.writeText(link); toast('Link gekopieerd'); }
     };
@@ -424,18 +835,18 @@ function renderSettings(hid) {
       const input = prompt('Plak de link of code van je partner:');
       const m = input?.match(/([a-z0-9]{16,})\s*$/i);
       if (!m) return;
-      if (state.items.length && !confirm('Je huidige (eigen) voorraad op dit apparaat wordt niet meegenomen. Doorgaan?')) return;
+      if (state.items.length && !confirm('Je huidige voorraad op dit apparaat wordt niet meegenomen. Doorgaan?')) return;
       ls.set('vv:household', m[1].toLowerCase());
       location.reload();
     };
   } else {
     block.innerHTML = `
       <p class="small">⚠️ De app draait nu in <b>lokale modus</b>: gegevens staan alleen op dit apparaat.</p>
-      <p class="small muted">Om samen te synchroniseren moet eenmalig een (gratis) Firebase-project gekoppeld worden in <code>config.js</code>. Zie de README voor de stappen (± 10 minuten).</p>`;
+      <p class="small muted">Om samen te synchroniseren moet een Firebase-project gekoppeld zijn in <code>config.js</code> (zie README).</p>`;
   }
 
   const durations = ls.get('vv:durations', {});
-  $('#durations').innerHTML = CATEGORIES.map((c) => `
+  $('#durations').innerHTML = FREEZER_CATS.map((id) => CAT[id]).map((c) => `
     <li><span>${c.icon} ${esc(c.label)}</span>
       <label><input type="number" min="1" max="36" inputmode="numeric" data-dur="${c.id}" value="${durations[c.id] ?? c.months}"> mnd</label>
     </li>`).join('');
@@ -447,12 +858,13 @@ function renderSettings(hid) {
   });
 
   $('#exportCsv').onclick = () => {
-    const rows = [['Product', 'Aantal', 'Eenheid', 'Categorie', 'Plek', 'In vriezer', 'THT', 'Notitie', 'Toegevoegd door']]
-      .concat(filteredItems().map((i) => [i.name, i.qty, i.unit, CAT[i.category]?.label || '', i.location, i.frozenAt, i.bestBefore, i.note, i.addedBy]));
+    const rows = [['Product', 'Aantal', 'Eenheid', 'Locatie', 'Categorie', 'Plek', 'Toegevoegd', 'THT', 'Minimum', 'Winkel', 'Barcode', 'Notitie', 'Toegevoegd door']]
+      .concat(state.items.filter(inStockView).map((i) => [i.name, i.qty, i.unit, SPACE[spaceOf(i)].label, CAT[i.category]?.label || '', i.location,
+        i.frozenAt, i.bestBefore, i.min || '', i.store, i.barcode, i.note, i.addedBy]));
     const csv = rows.map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `vriezer-${today()}.csv`;
+    a.download = `voorraad-${today()}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
@@ -471,7 +883,7 @@ async function init() {
   fillSelects();
   const hid = resolveHousehold();
   store = await createStore(firebaseConfig, hid, setStatus);
-  store.onItems((items) => { state.items = items; renderStock(); });
+  store.onItems((items) => { state.items = items; renderStock(); renderShop(); });
   store.onLog((log) => { state.log = log; renderLog(); renderDatalists(); });
   renderSettings(hid);
 
@@ -489,7 +901,6 @@ async function init() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
-  // Datumbadges actueel houden als de app lang open staat
-  setInterval(renderStock, 60 * 60 * 1000);
+  setInterval(() => { renderStock(); renderShop(); }, 60 * 60 * 1000);
 }
 init();

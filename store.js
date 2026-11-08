@@ -52,6 +52,7 @@ function createLocalStore(hid, onStatus) {
     async updateItem(id, patch) { state.items[id] = { ...state.items[id], ...patch }; save(); },
     async deleteItem(id) { delete state.items[id]; save(); },
     async addLog(entry) { const id = newId(); state.log[id] = entry; save(); return id; },
+    async updateLog(id, patch) { if (state.log[id]) { state.log[id] = { ...state.log[id], ...patch }; save(); } },
     async deleteLog(id) { delete state.log[id]; save(); },
   };
 }
@@ -97,6 +98,7 @@ async function createCloudStore(config, hid, onStatus) {
     async updateItem(id, patch) { fs.updateDoc(fs.doc(itemsCol, id), patch); },
     async deleteItem(id) { fs.deleteDoc(fs.doc(itemsCol, id)); },
     async addLog(entry) { const ref = fs.doc(logCol); fs.setDoc(ref, entry); return ref.id; },
+    async updateLog(id, patch) { fs.updateDoc(fs.doc(logCol, id), patch); },
     async deleteLog(id) { fs.deleteDoc(fs.doc(logCol, id)); },
   };
 }

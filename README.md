@@ -1,18 +1,20 @@
-# ❄️ Vriezer-voorraad
+# 🏠 Voorraad (vriezer, voorraadkast & koelkast)
 
-Een simpele, mobielvriendelijke web-app om samen bij te houden wat er in de vriezer ligt.
+Een simpele, mobielvriendelijke web-app om samen bij te houden wat er in huis ligt: in de vriezer, de voorraadkast en de koelkast.
 
 ## Functies
 
-- **Toevoegen**: product, aantal/gewicht + eenheid, categorie, plek (lade), datum in vriezer, THT en notitie.
-- **THT-suggestie**: wordt automatisch ingevuld op basis van de categorie (bijv. gehakt 3 mnd, groente 9 mnd). Aanpasbaar per categorie in Instellingen.
-- **Eruit halen**: deels of helemaal, met reden *opgemaakt* of *weggegooid*. Met "Ongedaan maken" als je mistikt.
-- **Eerst op**: sortering op THT, kleurmarkering voor bijna/over datum, en een filter "wat moet eerst op".
-- **Zoeken, filteren** op categorie en sorteren per lade.
-- **Geschiedenis**: wie legde wat erin / haalde wat eruit, met knop om iets snel opnieuw toe te voegen.
-- **Slim invullen**: bekende producten vullen categorie, eenheid en lade automatisch in.
-- **Samen gebruiken**: via een deel-link zien jullie allebei direct dezelfde voorraad.
-- **Installeerbaar** als app op het beginscherm (PWA) en werkt ook offline.
+- **Drie locaties**: ❄️ Vriezer, 🥫 Voorraadkast en 🥛 Koelkast, met een schakelaar bovenin (of alles tegelijk).
+- **Toevoegen**: product, aantal/gewicht + eenheid, categorie, plek (lade/plank), datum, THT, minimumvoorraad, winkel en notitie.
+- **Snel − / +** op elk product. Snelle herhaalde tikken worden in de geschiedenis samengevoegd.
+- **THT-suggestie** voor de vriezer op basis van de categorie (aanpasbaar in Instellingen). Voor kast/koelkast vul je de datum van de verpakking in.
+- **Minimumvoorraad → boodschappenlijst**: zakt een product onder het minimum, dan staat het vanzelf op de lijst. Ook los iets op de lijst zetten kan.
+- **Boodschappenlijst per winkel**, met ✓ *gekocht* (gaat direct terug in de voorraad), ✕ *niet nodig* (7 dagen van de lijst) en *lijst delen* (bijv. via WhatsApp).
+- **Barcodescanner**: productnaam wordt opgezocht via Open Food Facts; een al bekend product herkent de app direct (− eruit / + erbij).
+- **Eruit halen** (deels of alles), met reden *opgemaakt* of *weggegooid*, en overal *ongedaan maken*.
+- **Eerst op**: sortering op THT, kleurmarkering voor bijna/over datum.
+- **Geschiedenis**: wie wat erin legde, eruit haalde of kocht.
+- **Samen gebruiken** via een privé deel-link; **installeerbaar** op het beginscherm en werkt offline.
 - **CSV-export**.
 
 ## Online zetten (GitHub Pages)
@@ -51,6 +53,7 @@ Iedere vriezer heeft een lange, willekeurige code (in de deel-link). De Firestor
 | `app.js` | App-logica |
 | `store.js` | Opslag: lokaal of Firebase |
 | `vendor/firebase.js` | Meegebundelde Firebase SDK v10.12.2 (geen externe CDN nodig) |
+| `vendor/barcode.js`, `vendor/zxing_reader.wasm` | Barcode-lezer (barcode-detector 2.2.11 / zxing-wasm 1.2.14) voor telefoons zonder ingebouwde scanner, zoals iPhone |
 | `config.js` | Firebase-instellingen (optioneel) |
 | `firestore.rules` | Beveiligingsregels voor Firestore |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Installeerbaar + offline |

@@ -1,7 +1,7 @@
 {
-  "name": "Vriezer-voorraad",
-  "short_name": "Vriezer",
-  "description": "Houd samen bij wat er in de vriezer ligt.",
+  "name": "Voorraad",
+  "short_name": "Voorraad",
+  "description": "Houd samen bij wat er in de vriezer, voorraadkast en koelkast ligt.",
   "lang": "nl",
   "start_url": "./",
   "scope": "./",

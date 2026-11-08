@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#0f6fa8">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Vriezer">
-  <title>Vriezer-voorraad</title>
+  <meta name="apple-mobile-web-app-title" content="Voorraad">
+  <title>Voorraad</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -15,30 +15,48 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>❄️ Vriezer</h1>
+    <h1 id="appTitle">🏠 Voorraad</h1>
     <span id="syncStatus" class="sync" title="Synchronisatiestatus"></span>
   </header>
 
   <main>
     <!-- VOORRAAD -->
     <section id="view-stock" class="view active">
+      <div id="spaces" class="spaces" role="tablist" aria-label="Locatie"></div>
       <div class="search">
         <input id="search" type="search" placeholder="Zoek product…" autocomplete="off">
+        <button id="scanBtn" class="icon-btn square" aria-label="Barcode scannen" title="Barcode scannen">📷</button>
         <select id="sort" aria-label="Sorteren">
           <option value="tht">Eerst op</option>
           <option value="name">A–Z</option>
           <option value="recent">Nieuwst</option>
-          <option value="location">Per lade</option>
+          <option value="location">Per plek</option>
         </select>
       </div>
-      <div id="chips" class="chips" role="tablist" aria-label="Categorie"></div>
+      <div id="chips" class="chips" aria-label="Categorie"></div>
       <div id="summary" class="summary"></div>
       <ul id="stockList" class="list"></ul>
       <div id="emptyStock" class="empty" hidden>
-        <div class="empty-icon">🧊</div>
-        <p>De vriezer is (nog) leeg.</p>
-        <p class="muted">Tik op <b>+</b> om iets toe te voegen.</p>
+        <div class="empty-icon">📦</div>
+        <p id="emptyText">Hier ligt (nog) niets.</p>
+        <p class="muted">Tik op <b>+</b> om iets toe te voegen of op <b>📷</b> om te scannen.</p>
       </div>
+    </section>
+
+    <!-- BOODSCHAPPEN -->
+    <section id="view-shop" class="view">
+      <form id="shopAdd" class="search" autocomplete="off">
+        <input name="name" list="nameList" placeholder="Iets op de lijst zetten…" aria-label="Product voor de boodschappenlijst">
+        <button class="icon-btn square primary" aria-label="Toevoegen">＋</button>
+      </form>
+      <div id="storeChips" class="chips"></div>
+      <ul id="shopList" class="list"></ul>
+      <div id="emptyShop" class="empty" hidden>
+        <div class="empty-icon">🛒</div>
+        <p>Niets nodig!</p>
+        <p class="muted small">Producten met een <b>minimumvoorraad</b> komen hier vanzelf op als ze bijna op zijn.</p>
+      </div>
+      <button id="shareList" class="btn secondary block" hidden>📤 Lijst delen</button>
     </section>
 
     <!-- GESCHIEDENIS -->
@@ -57,7 +75,7 @@
           <span>Jouw naam</span>
           <input id="myName" type="text" placeholder="bijv. Joost" autocomplete="given-name">
         </label>
-        <p class="muted small">Wordt bij elke toevoeging/uitname getoond, zodat jullie zien wie wat deed.</p>
+        <p class="muted small">Wordt bij elke wijziging getoond, zodat jullie zien wie wat deed.</p>
       </div>
 
       <div class="card settings">
@@ -67,12 +85,12 @@
 
       <div class="card settings">
         <h2>Gegevens</h2>
-        <button id="exportCsv" class="btn secondary block">⬇️ Exporteer naar CSV</button>
+        <button id="exportCsv" class="btn secondary block">⬇️ Exporteer voorraad naar CSV</button>
       </div>
 
       <div class="card settings">
-        <h2>Bewaartijden (standaard THT)</h2>
-        <p class="muted small">Bij toevoegen wordt de THT automatisch voorgesteld op basis van de categorie. Je kunt hem altijd aanpassen.</p>
+        <h2>Bewaartijden vriezer</h2>
+        <p class="muted small">Bij toevoegen aan de vriezer wordt de THT automatisch voorgesteld op basis van de categorie. Je kunt hem altijd aanpassen.</p>
         <ul id="durations" class="durations"></ul>
       </div>
     </section>
@@ -81,23 +99,29 @@
   <button id="fab" class="fab" aria-label="Product toevoegen">+</button>
 
   <nav class="tabbar">
-    <button data-view="stock" class="active"><span>🧊</span>Voorraad</button>
+    <button data-view="stock" class="active"><span>📦</span>Voorraad</button>
+    <button data-view="shop"><span>🛒</span>Boodschappen<b id="shopBadge" class="tab-badge" hidden></b></button>
     <button data-view="log"><span>📜</span>Geschiedenis</button>
     <button data-view="settings"><span>⚙️</span>Instellingen</button>
   </nav>
 
   <!-- Toevoegen / bewerken -->
   <dialog id="itemDialog" class="sheet">
-    <form id="itemForm" method="dialog">
+    <form id="itemForm" method="dialog" autocomplete="off">
       <div class="sheet-head">
         <h2 id="itemTitle">Toevoegen</h2>
         <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
       </div>
       <label class="field">
         <span>Product</span>
-        <input name="name" list="nameList" required autocomplete="off" placeholder="bijv. Kipfilet">
+        <div class="input-row">
+          <input name="name" list="nameList" required placeholder="bijv. Pindakaas">
+          <button type="button" id="formScan" class="icon-btn square" aria-label="Barcode scannen">📷</button>
+        </div>
         <datalist id="nameList"></datalist>
+        <small id="barcodeInfo" class="muted"></small>
       </label>
+      <div class="segmented" id="spaceSeg" role="radiogroup" aria-label="Locatie"></div>
       <div class="row">
         <label class="field grow">
           <span>Aantal / gewicht</span>
@@ -112,18 +136,20 @@
           <select name="unit"></select>
         </label>
       </div>
-      <label class="field">
-        <span>Categorie</span>
-        <select name="category"></select>
-      </label>
-      <label class="field">
-        <span>Plek in de vriezer</span>
-        <input name="location" list="locationList" autocomplete="off" placeholder="bijv. Lade 1">
-        <datalist id="locationList"></datalist>
-      </label>
       <div class="row">
         <label class="field grow">
-          <span>In vriezer</span>
+          <span>Categorie</span>
+          <select name="category"></select>
+        </label>
+        <label class="field grow">
+          <span>Plek</span>
+          <input name="location" list="locationList" placeholder="bijv. Lade 1">
+          <datalist id="locationList"></datalist>
+        </label>
+      </div>
+      <div class="row">
+        <label class="field grow">
+          <span id="dateLabel">In vriezer</span>
           <input name="frozenAt" type="date" required>
         </label>
         <label class="field grow">
@@ -131,22 +157,36 @@
           <input name="bestBefore" type="date">
         </label>
       </div>
+      <div class="row">
+        <label class="field grow">
+          <span>Minimaal in huis</span>
+          <input name="min" type="number" inputmode="decimal" min="0" step="any" placeholder="geen">
+        </label>
+        <label class="field grow">
+          <span>Winkel</span>
+          <input name="store" list="storeList" placeholder="bijv. Albert Heijn">
+          <datalist id="storeList"></datalist>
+        </label>
+      </div>
+      <p class="muted small hint">Zakt de voorraad onder het minimum, dan komt het vanzelf op de boodschappenlijst.</p>
       <label class="field">
         <span>Notitie</span>
-        <input name="note" autocomplete="off" placeholder="bijv. gemarineerd, voor 2 pers.">
+        <input name="note" placeholder="bijv. gemarineerd, voor 2 pers.">
       </label>
+      <input type="hidden" name="barcode">
       <div class="sheet-actions">
-        <button type="button" id="deleteItem" class="btn danger" hidden>Verwijderen</button>
+        <button type="button" id="deleteItem" class="btn danger" hidden aria-label="Verwijderen">🗑️</button>
+        <button type="button" id="takeFromEdit" class="btn secondary" hidden>Eruit halen…</button>
         <button type="submit" class="btn primary grow">Opslaan</button>
       </div>
     </form>
   </dialog>
 
-  <!-- Uit de vriezer -->
+  <!-- Uit de voorraad -->
   <dialog id="takeDialog" class="sheet">
     <form id="takeForm" method="dialog">
       <div class="sheet-head">
-        <h2 id="takeTitle">Uit de vriezer</h2>
+        <h2 id="takeTitle">Eruit halen</h2>
         <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
       </div>
       <p id="takeInfo" class="muted"></p>
@@ -162,6 +202,7 @@
         <label><input type="radio" name="reason" value="used" checked><span>🍽️ Opgemaakt</span></label>
         <label><input type="radio" name="reason" value="trashed"><span>🗑️ Weggegooid</span></label>
       </div>
+      <label class="check" id="toListRow"><input type="checkbox" name="toList"> 🛒 Zet op de boodschappenlijst als het op is</label>
       <div class="sheet-actions">
         <button type="button" id="takeAll" class="btn secondary">Alles</button>
         <button type="submit" class="btn primary grow">Eruit halen</button>
@@ -169,11 +210,44 @@
     </form>
   </dialog>
 
+  <!-- Gescand bekend product -->
+  <dialog id="quickDialog" class="sheet">
+    <form method="dialog">
+      <div class="sheet-head">
+        <h2 id="quickTitle"></h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <p id="quickInfo" class="muted"></p>
+      <div class="quick-actions">
+        <button type="button" class="btn secondary" data-quick="dec">− Eruit</button>
+        <button type="button" class="btn primary" data-quick="inc">+ Erbij</button>
+      </div>
+      <button type="button" class="btn secondary block" data-quick="edit">✏️ Bewerken</button>
+    </form>
+  </dialog>
+
+  <!-- Scanner -->
+  <dialog id="scanDialog" class="sheet scan">
+    <div class="sheet-head pad">
+      <h2>Scan barcode</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="scan-view">
+      <video id="scanVideo" playsinline muted></video>
+      <div class="scan-frame"></div>
+    </div>
+    <p id="scanMsg" class="muted pad center">Richt de camera op de barcode…</p>
+    <form id="manualCode" class="input-row pad">
+      <input name="code" inputmode="numeric" placeholder="of typ de barcode" aria-label="Barcode handmatig">
+      <button class="btn secondary">OK</button>
+    </form>
+  </dialog>
+
   <!-- Eerste keer -->
   <dialog id="welcomeDialog" class="sheet">
     <form id="welcomeForm" method="dialog">
       <div class="sheet-head"><h2>Welkom 👋</h2></div>
-      <p>Hiermee houden jullie samen bij wat er in de vriezer ligt.</p>
+      <p>Hiermee houden jullie samen bij wat er in de vriezer, voorraadkast en koelkast ligt.</p>
       <label class="field">
         <span>Hoe heet je?</span>
         <input name="name" required autocomplete="given-name" placeholder="Je voornaam">

@@ -1,6 +1,6 @@
 // Service worker: maakt de app installeerbaar en offline bruikbaar.
 // Strategie: stale-while-revalidate voor de eigen bestanden.
-const CACHE = 'vriezer-v2';
+const CACHE = 'vriezer-v3';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'store.js', 'config.js', 'vendor/firebase.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 

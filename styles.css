@@ -226,3 +226,63 @@ dialog form { grid-template-columns: minmax(0, 1fr); padding: 16px 16px calc(16p
 .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
 .toast button { background: none; border: 0; color: var(--accent); font-weight: 700; padding: 4px; }
 @media (prefers-color-scheme: dark) { .toast button { color: #0f6fa8; } }
+
+/* ---------- Voorraad-uitbreiding ---------- */
+:root { --info: #0f6fa8; --info-bg: #e2f0f9; }
+@media (prefers-color-scheme: dark) { :root { --info: #7cc4ef; --info-bg: #13334a; } }
+
+.spaces { display: flex; gap: 6px; margin-bottom: 10px; }
+.spaces button {
+  flex: 1; min-width: 0; border: 1px solid var(--border); background: var(--surface); border-radius: 12px;
+  padding: 6px 4px; display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: .8rem; font-weight: 600;
+}
+.spaces button span { font-size: 1.25rem; }
+.spaces button small { font-weight: 400; color: var(--muted); font-size: .72rem; }
+.spaces button.active { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.spaces button.active small { color: inherit; opacity: .8; }
+
+.icon-btn.square { border-radius: 10px; width: 44px; height: 44px; flex: none; font-size: 1.15rem; }
+.icon-btn.primary { background: var(--accent); color: var(--accent-text); }
+.input-row { display: flex; gap: 8px; }
+.input-row input { flex: 1; min-width: 0; }
+
+.badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.badge.info { background: var(--info-bg); color: var(--info); }
+.badge.muted { background: var(--surface-2); color: var(--muted); font-weight: 500; }
+.item.zero .item-name { color: var(--muted); }
+
+.qty-ctl { display: flex; align-items: center; flex: none; background: var(--surface-2); border-radius: 12px; }
+.qty-ctl button { border: 0; background: none; width: 38px; height: 46px; font-size: 1.35rem; font-weight: 600; color: var(--accent); }
+.qty-ctl button:disabled { opacity: .3; }
+.qty-ctl button:active { transform: scale(.9); }
+.qty-ctl .qty { min-width: 34px; text-align: center; line-height: 1.05; display: flex; flex-direction: column; }
+.qty-ctl .qty b { font-size: 1.05rem; }
+.qty-ctl .qty small { font-size: .65rem; color: var(--muted); }
+
+.item.shop { gap: 10px; }
+.check-btn {
+  flex: none; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--accent);
+  background: none; color: var(--accent); font-size: 1.1rem; font-weight: 700;
+}
+.check-btn:active { background: var(--accent); color: var(--accent-text); }
+#shareList { margin-top: 16px; }
+#view-shop .search { margin-bottom: 4px; }
+
+.tabbar button { position: relative; font-size: .7rem; }
+.tab-badge {
+  position: absolute; top: 6px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 9px; background: var(--bad); color: #fff; font-size: .7rem; line-height: 18px;
+}
+.hint { margin: -6px 0 0; }
+.check { display: flex; gap: 8px; align-items: center; font-size: .95rem; }
+.check input { width: 20px; height: 20px; }
+.quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+dialog.scan { overflow: hidden; }
+.pad { padding-left: 16px; padding-right: 16px; }
+.sheet-head.pad { padding-top: 16px; padding-bottom: 12px; }
+.center { text-align: center; }
+.scan-view { position: relative; background: #000; aspect-ratio: 4 / 3; }
+.scan-view video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-frame { position: absolute; inset: 30% 12%; border: 3px solid rgba(255,255,255,.9); border-radius: 12px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); }
+#manualCode { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
