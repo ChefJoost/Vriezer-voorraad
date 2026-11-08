@@ -8,14 +8,11 @@
 // De beveiliging zit in de Firestore-regels (firestore.rules) en de
 // geheime huishoud-code in de deel-link.
 
-export const firebaseConfig = null;
-
-// Voorbeeld:
-// export const firebaseConfig = {
-//   apiKey: "AIza...",
-//   authDomain: "mijn-vriezer.firebaseapp.com",
-//   projectId: "mijn-vriezer",
-//   storageBucket: "mijn-vriezer.appspot.com",
-//   messagingSenderId: "1234567890",
-//   appId: "1:1234567890:web:abcdef123456",
-// };
+export const firebaseConfig = {
+  apiKey: "AIzaSyC9sPurlUgHuC-pf4ZRxmlC7Nql3TF98lc",
+  authDomain: "vriezer-voorraad.firebaseapp.com",
+  projectId: "vriezer-voorraad",
+  storageBucket: "vriezer-voorraad.firebasestorage.app",
+  messagingSenderId: "763248093696",
+  appId: "1:763248093696:web:1aac6863315994721646e5",
+};

@@ -1,8 +1,8 @@
 // Opslaglaag: lokaal (localStorage) of gedeeld via Firebase Firestore.
 // Beide leveren dezelfde interface aan app.js.
 
-const FB_VERSION = '10.12.2';
-const FB = (m) => `https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-${m}.js`;
+// Firebase SDK (v10.12.2) is lokaal meegebundeld in vendor/firebase.js,
+// zodat de app niet afhankelijk is van een externe CDN en offline werkt.
 
 export function newId(len = 20) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -58,14 +58,15 @@ function createLocalStore(hid, onStatus) {
 
 /* ---------------- Firebase ---------------- */
 async function createCloudStore(config, hid, onStatus) {
-  const [{ initializeApp }, fs, auth] = await Promise.all([
-    import(FB('app')), import(FB('firestore')), import(FB('auth')),
-  ]);
-  const app = initializeApp(config);
+  const fs = await import('./vendor/firebase.js');
+  const auth = fs;
+  const app = fs.initializeApp(config);
   const db = fs.initializeFirestore(app, {
     localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }),
   });
-  const a = auth.getAuth(app);
+  const a = auth.initializeAuth(app, {
+    persistence: [auth.indexedDBLocalPersistence, auth.browserLocalPersistence],
+  });
   await auth.signInAnonymously(a);
 
   const itemsCol = fs.collection(db, 'households', hid, 'items');

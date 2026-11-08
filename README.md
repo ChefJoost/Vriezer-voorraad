@@ -26,6 +26,8 @@ Zonder verdere configuratie draait de app in **lokale modus**: alles werkt, maar
 
 ## Synchroniseren tussen twee telefoons (Firebase, gratis)
 
+✅ Al ingesteld voor project `vriezer-voorraad`. De stappen hieronder zijn alleen nodig als je ooit een nieuw project wilt koppelen.
+
 Eenmalig ± 10 minuten:
 
 1. Ga naar <https://console.firebase.google.com> en maak een nieuw project (Google Analytics mag uit).
@@ -48,6 +50,7 @@ Iedere vriezer heeft een lange, willekeurige code (in de deel-link). De Firestor
 | `styles.css` | Opmaak (licht/donker, mobiel eerst) |
 | `app.js` | App-logica |
 | `store.js` | Opslag: lokaal of Firebase |
+| `vendor/firebase.js` | Meegebundelde Firebase SDK v10.12.2 (geen externe CDN nodig) |
 | `config.js` | Firebase-instellingen (optioneel) |
 | `firestore.rules` | Beveiligingsregels voor Firestore |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Installeerbaar + offline |
