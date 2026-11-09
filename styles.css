@@ -317,3 +317,23 @@ textarea {
 .stepper.small button { width: 36px; }
 .stepper.small input { padding: 6px 4px; min-height: 40px; }
 .cook-row .unit { color: var(--muted); width: 42px; font-size: .75rem; }
+
+/* ---------- Inzichten ---------- */
+.count-card { margin: 0 0 10px; padding: 12px 14px; border: 1px solid var(--accent); }
+.count-head { display: flex; justify-content: space-between; align-items: center; }
+.count-card p { margin: 2px 0 6px; }
+.link-btn { border: 0; background: none; color: var(--muted); text-decoration: underline; padding: 4px; }
+.count-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-top: 1px solid var(--border); }
+.count-name { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.count-name small { color: var(--muted); font-size: .75rem; }
+.count-qty { white-space: nowrap; font-size: .9rem; }
+.small-btn { min-height: 38px; padding: 0 12px; border-radius: 10px; }
+.count-row input { width: 70px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; min-height: 38px; background: var(--surface); }
+#forecastBlock { margin-top: 18px; }
+#suggestBlock .list { margin-bottom: 14px; }
+.stats { margin: 0 0 8px; }
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; }
+.stat-grid div { background: var(--surface-2); border-radius: 10px; padding: 8px 4px; display: flex; flex-direction: column; min-width: 0; }
+.stat-grid b { font-size: 1.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-grid small { font-size: .72rem; color: var(--muted); }
+.stat-grid .good { color: var(--ok); } .stat-grid .warn { color: var(--warn); } .stat-grid .bad { color: var(--bad); }

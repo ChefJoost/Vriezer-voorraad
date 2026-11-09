@@ -23,6 +23,7 @@
     <!-- VOORRAAD -->
     <section id="view-stock" class="view active">
       <div id="spaces" class="spaces" role="tablist" aria-label="Locatie"></div>
+      <div id="countCard"></div>
       <div class="search">
         <input id="search" type="search" placeholder="Zoek product…" autocomplete="off">
         <button id="scanBtn" class="icon-btn square" aria-label="Barcode scannen" title="Barcode scannen">📷</button>
@@ -57,10 +58,12 @@
         <p class="muted small">Producten met een <b>minimumvoorraad</b> komen hier vanzelf op als ze bijna op zijn.</p>
       </div>
       <button id="shareList" class="btn secondary block" hidden>📤 Lijst delen</button>
+      <div id="forecastBlock"></div>
     </section>
 
     <!-- RECEPTEN -->
     <section id="view-recipes" class="view">
+      <div id="suggestBlock"></div>
       <div id="menuBlock"></div>
       <div class="search">
         <input id="recipeSearch" type="search" placeholder="Zoek recept…" autocomplete="off">
@@ -76,6 +79,7 @@
 
     <!-- GESCHIEDENIS -->
     <section id="view-log" class="view">
+      <div id="statsCard"></div>
       <ul id="logList" class="list log"></ul>
       <div id="emptyLog" class="empty" hidden>
         <div class="empty-icon">📜</div>

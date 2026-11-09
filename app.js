@@ -1,5 +1,6 @@
 import { firebaseConfig } from './config.js';
 import { createStore, newId } from './store.js';
+import { usageStats, predictRunOut, suggestBuy, pickCounts, monthStats, recipeScore, DAY } from './insights.js';
 import { parseIngredients, ingredientToText, checkIngredient, findMatches, toShopping, cookAmount } from './recipes.js';
 
 /* ---------------- Constanten ---------------- */
@@ -94,6 +95,16 @@ function needOf(i) {
   return Math.max(want, snoozed ? 0 : round(short), 0);
 }
 const inStockView = (i) => i.qty > 0 || Number(i.min) > 0;
+
+// Verbruiksvoorspelling (gecachet per item zolang voorraad en geschiedenis gelijk blijven)
+const statsCache = new Map();
+function statsFor(i) {
+  const k = `${i.id}|${i.qty}|${i.unit}|${state.log.length}|${state.log[0]?.at || 0}`;
+  if (!statsCache.has(k)) statsCache.set(k, usageStats(state.log, i));
+  return statsCache.get(k);
+}
+const runOutIn = (i) => (needOf(i) > 0 ? null : predictRunOut(i, statsFor(i)));
+const daysLeftOf = (i) => (i.bestBefore && i.qty > 0 ? daysUntil(i.bestBefore) : null);
 
 let toastTimer;
 function toast(msg, actions = []) {
@@ -270,6 +281,7 @@ function itemHTML(i) {
   const badges = [
     e.label ? `<span class="badge ${e.cls}">${esc(e.label)}</span>` : '',
     i.qty <= 0 ? `<span class="badge bad">op</span>` : '',
+    runOutIn(i) !== null ? `<span class="badge warn">🔮 op over ~${runOutIn(i)} dg${runOutIn(i) === 1 ? '' : 'n'}</span>` : '',
     need > 0 ? `<span class="badge info">🛒 op de lijst</span>` : (Number(i.min) > 0 ? `<span class="badge muted">min ${fmtNum(i.min)}</span>` : ''),
   ].join('');
   return `<li class="item ${e.cls} ${i.qty <= 0 ? 'zero' : ''}">
@@ -288,8 +300,51 @@ function itemHTML(i) {
   </li>`;
 }
 
+/* Natellen (cycle counting): elke dag max. 3 producten */
+let countEditing = null;
+function renderCountCard() {
+  const el = $('#countCard');
+  if (ls.get('vv:countDone', '') === today()) { el.innerHTML = ''; return; }
+  const countedToday = state.log.filter((l) => l.type === 'count' && toISO(new Date(l.at)) === today()).length;
+  const picks = pickCounts(state.items, state.log, Date.now(), Math.max(0, 3 - countedToday));
+  if (!picks.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="card count-card">
+    <div class="count-head"><b>🔍 Klopt dit nog?</b><button class="link-btn" data-count-skip>Later</button></div>
+    <p class="muted small">Even natellen houdt de voorraad betrouwbaar.</p>
+    ${picks.map((i) => `<div class="count-row">
+      <span class="count-name">${CAT[i.category]?.icon || '📦'} ${esc(i.name)}<small>${SPACE[spaceOf(i)].icon} ${esc(i.location || SPACE[spaceOf(i)].short)}</small></span>
+      ${countEditing === i.id
+        ? `<input type="number" inputmode="decimal" min="0" step="any" value="${i.qty}" data-count-input="${i.id}" aria-label="Werkelijk aantal">
+           <button class="btn primary small-btn" data-count-save="${i.id}">OK</button>`
+        : `<b class="count-qty">${esc(fmtQty(i.qty, i.unit))}</b>
+           <button class="btn secondary small-btn" data-count-ok="${i.id}" aria-label="Klopt">✓</button>
+           <button class="btn secondary small-btn" data-count-edit="${i.id}" aria-label="Klopt niet">✗</button>`}
+    </div>`).join('')}
+  </div>`;
+}
+async function recordCount(item, actual) {
+  const match = round(actual) === round(item.qty);
+  const patch = { checkedAt: Date.now(), ...(match ? {} : { qty: round(actual), updatedBy: me(), updatedAt: Date.now() }) };
+  if (!match && actual <= 0 && !(Number(item.min) > 0)) await store.deleteItem(item.id);
+  else await store.updateItem(item.id, patch);
+  await store.addLog({ ...logBase(item), type: 'count', match, before: item.qty, qty: round(actual), by: me(), at: Date.now() });
+  countEditing = null;
+  if (!match) toast(`${item.name} bijgewerkt: ${fmtQty(actual, item.unit)}`);
+}
+$('#countCard').addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.closest('[data-count-skip]')) { ls.set('vv:countDone', today()); return renderCountCard(); }
+  const ok = t.closest('[data-count-ok]');
+  if (ok) { const i = byId(ok.dataset.countOk); return i && recordCount(i, i.qty); }
+  const ed = t.closest('[data-count-edit]');
+  if (ed) { countEditing = ed.dataset.countEdit; renderCountCard(); $(`[data-count-input="${countEditing}"]`)?.select(); return; }
+  const sv = t.closest('[data-count-save]');
+  if (sv) { const i = byId(sv.dataset.countSave); const v = Number($(`[data-count-input="${sv.dataset.countSave}"]`).value); if (i && v >= 0) recordCount(i, v); }
+});
+
 function renderStock() {
   renderSpaces();
+  renderCountCard();
   renderChips();
   renderSummary();
   const list = filteredItems();
@@ -364,7 +419,33 @@ function renderShop() {
   $('#shopList').innerHTML = html;
   $('#emptyShop').hidden = all.length > 0;
   $('#shareList').hidden = !all.length;
+  renderForecast();
 }
+
+function renderForecast() {
+  const soon = state.items.map((i) => ({ i, d: runOutIn(i) })).filter((x) => x.d !== null).sort((a, b) => a.d - b.d);
+  $('#forecastBlock').innerHTML = soon.length ? `<h2 class="section-title">🔮 Binnenkort op</h2>
+    <p class="muted small">Op basis van jullie verbruik.</p>
+    <ul class="list">${soon.map(({ i, d }) => {
+      const st = statsFor(i);
+      return `<li class="item">
+        <div class="item-icon">${CAT[i.category]?.icon || '📦'}</div>
+        <div class="item-main">
+          <div class="item-name">${esc(i.name)}</div>
+          <div class="item-meta">nog ${esc(fmtQty(i.qty, i.unit))} · ± ${esc(fmtNum(round(st.perWeek)))} per week · op over ~${d} dg${d === 1 ? '' : 'n'}</div>
+        </div>
+        <button class="take-btn" data-forecast="${i.id}">＋ ${esc(fmtQty(suggestBuy(i, st), i.unit))}</button>
+      </li>`;
+    }).join('')}</ul>` : '';
+}
+$('#forecastBlock').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-forecast]');
+  if (!b) return;
+  const i = byId(b.dataset.forecast);
+  const amount = suggestBuy(i, statsFor(i));
+  await store.updateItem(i.id, { want: amount, wantFor: '', snoozedUntil: 0 });
+  toast(`${i.name} op de lijst`, [undoAction(() => store.updateItem(i.id, { want: Number(i.want) || 0 }))]);
+});
 
 async function markBought(item) {
   const need = needOf(item);
@@ -411,7 +492,24 @@ $('#shareList').addEventListener('click', async () => {
 });
 
 /* ---------------- Render: geschiedenis ---------------- */
+function renderStatsCard() {
+  const m = monthStats(state.log);
+  const acc = m.accuracy === null ? '–' : `${Math.round(m.accuracy * 100)}%`;
+  const accCls = m.accuracy === null ? '' : m.accuracy >= 0.95 ? 'good' : m.accuracy >= 0.8 ? 'warn' : 'bad';
+  $('#statsCard').innerHTML = `<div class="card stats">
+    <h2>📊 Afgelopen 30 dagen</h2>
+    <div class="stat-grid">
+      <div><b class="${accCls}">${acc}</b><small>voorraad klopt${m.counts ? ` (${m.counts}× geteld)` : ''}</small></div>
+      <div><b class="${m.trashed ? 'warn' : 'good'}">${m.trashed}</b><small>weggegooid</small></div>
+      <div><b>${m.topUsed[0] ? esc(m.topUsed[0].name) : '–'}</b><small>meest gebruikt</small></div>
+    </div>
+    ${m.trashedNames.length ? `<p class="muted small">Weggegooid: ${esc(m.trashedNames.join(', '))}</p>` : ''}
+    <p class="muted small">Doel: voorraad klopt ≥ 95% en zo min mogelijk weggooien.</p>
+  </div>`;
+}
+
 function renderLog() {
+  renderStatsCard();
   $('#emptyLog').hidden = state.log.length > 0;
   let html = '', curDay;
   state.log.forEach((l) => {
@@ -424,17 +522,19 @@ function renderLog() {
       html += `<li class="group-title">${esc(label)}</li>`;
     }
     const sp = SPACE[l.space] || SPACE.vriezer;
-    const [icon, verb] = l.type === 'in'
+    const [icon, verb] = l.type === 'count'
+      ? ['🔍', l.match ? 'telde na: klopt' : `telde na: ${fmtNum(l.before)} → ${fmtNum(l.qty)}`]
+      : l.type === 'in'
       ? (l.reason === 'bought' ? ['🛒', `kocht → ${sp.short.toLowerCase()}`] : ['⬇️', `legde ${sp.in}`])
       : (l.reason === 'trashed' ? ['🗑️', 'gooide weg'] : ['⬆️', `pakte ${sp.out}`]);
     const time = d.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' });
     html += `<li class="item">
       <div class="item-icon">${icon}</div>
       <div class="item-main">
-        <div class="item-name">${esc(l.name)} <span class="muted">· ${esc(fmtQty(l.qty, l.unit))}</span></div>
+        <div class="item-name">${esc(l.name)}${l.type === 'count' ? '' : ` <span class="muted">· ${esc(fmtQty(l.qty, l.unit))}</span>`}</div>
         <div class="when">${esc(l.by)} ${esc(verb)} · ${time}</div>
       </div>
-      <button class="readd" data-readd="${l.id}" aria-label="Opnieuw toevoegen" title="Opnieuw toevoegen">＋</button>
+      ${l.type === 'count' ? '' : `<button class="readd" data-readd="${l.id}" aria-label="Opnieuw toevoegen" title="Opnieuw toevoegen">＋</button>`}
     </li>`;
   });
   $('#logList').innerHTML = html;
@@ -761,7 +861,28 @@ function statusBadge(st, asText = false) {
   return asText ? '✓ alles in huis' : '<span class="badge">✓ alles in huis</span>';
 }
 
+function renderSuggestions() {
+  const scored = state.recipes
+    .map((r) => ({ r, s: recipeScore(recipeStatus(r).rows, daysLeftOf) }))
+    .filter((x) => x.s && x.s.missing === 0 && !(Number(x.r.planned) > 0))
+    .sort((a, b) => b.s.score - a.s.score || (a.r.lastCooked || 0) - (b.r.lastCooked || 0))
+    .slice(0, 3);
+  $('#suggestBlock').innerHTML = scored.length ? `<h2 class="section-title">💡 Wat eten we?</h2>
+    <p class="muted small">Alles in huis${scored.some((x) => x.s.usesSoon.length) ? ', en het maakt op wat het eerst over datum gaat' : ''}.</p>
+    <ul class="list">${scored.map(({ r, s }) => {
+      const soon = [...new Map(s.usesSoon.map((u) => [u.item.id, u])).values()].sort((a, b) => a.days - b.days);
+      return `<li class="item">
+        <div class="item-icon">💡</div>
+        <button class="item-main" data-recipe="${r.id}">
+          <div class="item-name">${esc(r.name)}</div>
+          <div class="item-meta">${soon.length ? soon.map((u) => `${esc(u.item.name)} (${u.days <= 0 ? 'THT vandaag' : `nog ${u.days} dg${u.days === 1 ? '' : 'n'}`})`).join(', ') : '✓ alles in huis'}</div>
+        </button>
+      </li>`;
+    }).join('')}</ul>` : '';
+}
+
 function renderRecipes() {
+  renderSuggestions();
   const planned = state.recipes.filter((r) => Number(r.planned) > 0).sort((a, b) => (a.plannedAt || 0) - (b.plannedAt || 0));
   const menu = $('#menuBlock');
   if (planned.length) {
@@ -1234,7 +1355,7 @@ async function init() {
     renderStock(); renderShop(); renderRecipes();
     if ($('#recipeDialog').open) renderRecipeDetail();
   });
-  store.onLog((log) => { state.log = log; renderLog(); renderDatalists(); });
+  store.onLog((log) => { state.log = log; renderLog(); renderDatalists(); renderStock(); renderShop(); renderRecipes(); });
   renderSettings(hid);
 
   if (!ls.get('vv:name')) {

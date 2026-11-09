@@ -20,6 +20,11 @@ Een simpele, mobielvriendelijke web-app om samen bij te houden wat er in huis li
   - **🛒 Op de lijst**: ontbrekende ingrediënten met één tik op de boodschappenlijst.
   - **📅 Op het menu**: plan recepten en zet in één keer alles voor het menu op de lijst.
   - **🍳 Gekookt**: boekt de gebruikte ingrediënten af uit de voorraad.
+- **Slim op basis van jullie eigen gebruik**:
+  - **🔍 Klopt dit nog?** Elke dag max. 3 producten natellen (cycle counting, zoals in een magazijn). Zo blijft de voorraad betrouwbaar.
+  - **🔮 Binnenkort op**: voorspelt uit de geschiedenis wanneer een product op raakt (vanaf 2× gebruikt over ≥ 7 dagen) en stelt voor hoeveel je voor een week nodig hebt.
+  - **💡 Wat eten we?**: recepten waarvoor alles in huis is, met voorrang voor wat het eerst over datum gaat.
+  - **📊 Afgelopen 30 dagen**: hoe vaak de voorraad klopte bij natellen (doel ≥ 95%) en wat er is weggegooid.
 - **CSV-export**.
 
 ## Online zetten (GitHub Pages)
@@ -57,6 +62,7 @@ Iedere vriezer heeft een lange, willekeurige code (in de deel-link). De Firestor
 | `styles.css` | Opmaak (licht/donker, mobiel eerst) |
 | `app.js` | App-logica |
 | `store.js` | Opslag: lokaal of Firebase |
+| `insights.js` | Verbruik voorspellen, natellen, statistieken en receptsuggesties |
 | `recipes.js` | Ingrediënten herkennen en vergelijken met de voorraad |
 | `vendor/firebase.js` | Meegebundelde Firebase SDK v10.12.2 (geen externe CDN nodig) |
 | `vendor/barcode.js`, `vendor/zxing_reader.wasm` | Barcode-lezer (barcode-detector 2.2.11 / zxing-wasm 1.2.14) voor telefoons zonder ingebouwde scanner, zoals iPhone |
@@ -65,3 +71,5 @@ Iedere vriezer heeft een lange, willekeurige code (in de deel-link). De Firestor
 | `sw.js`, `manifest.webmanifest`, `icons/` | Installeerbaar + offline |
 
 Lokaal testen: `python3 -m http.server` en open <http://localhost:8000>.
+
+Tests van de rekenregels (ingrediënten herkennen, voorspelling, natellen, suggesties): `npm test`.
