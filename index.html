@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f6fa8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Voorraad">
+  <title>Voorraad</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 id="appTitle">🏠 Voorraad</h1>
+    <span id="syncStatus" class="sync" title="Synchronisatiestatus"></span>
+  </header>
+
+  <main>
+    <!-- VOORRAAD -->
+    <section id="view-stock" class="view active">
+      <div id="spaces" class="spaces" role="tablist" aria-label="Locatie"></div>
+      <div id="countCard"></div>
+      <div class="search">
+        <input id="search" type="search" placeholder="Zoek product…" autocomplete="off">
+        <button id="scanBtn" class="icon-btn square" aria-label="Barcode scannen" title="Barcode scannen">📷</button>
+        <select id="sort" aria-label="Sorteren">
+          <option value="tht">Eerst op</option>
+          <option value="name">A–Z</option>
+          <option value="recent">Nieuwst</option>
+          <option value="location">Per plek</option>
+        </select>
+      </div>
+      <div id="chips" class="chips" aria-label="Categorie"></div>
+      <div id="summary" class="summary"></div>
+      <ul id="stockList" class="list"></ul>
+      <div id="emptyStock" class="empty" hidden>
+        <div class="empty-icon">📦</div>
+        <p id="emptyText">Hier ligt (nog) niets.</p>
+        <p class="muted">Tik op <b>+</b> om iets toe te voegen of op <b>📷</b> om te scannen.</p>
+      </div>
+    </section>
+
+    <!-- BOODSCHAPPEN -->
+    <section id="view-shop" class="view">
+      <form id="shopAdd" class="search" autocomplete="off">
+        <input name="name" list="nameList" placeholder="Iets op de lijst zetten…" aria-label="Product voor de boodschappenlijst">
+        <button class="icon-btn square primary" aria-label="Toevoegen">＋</button>
+      </form>
+      <div id="storeChips" class="chips"></div>
+      <ul id="shopList" class="list"></ul>
+      <div id="emptyShop" class="empty" hidden>
+        <div class="empty-icon">🛒</div>
+        <p>Niets nodig!</p>
+        <p class="muted small">Producten met een <b>minimumvoorraad</b> komen hier vanzelf op als ze bijna op zijn.</p>
+      </div>
+      <button id="shareList" class="btn secondary block" hidden>📤 Lijst delen</button>
+      <div id="forecastBlock"></div>
+    </section>
+
+    <!-- RECEPTEN -->
+    <section id="view-recipes" class="view">
+      <div id="suggestBlock"></div>
+      <div id="menuBlock"></div>
+      <div class="search">
+        <input id="recipeSearch" type="search" placeholder="Zoek recept…" autocomplete="off">
+        <button id="newRecipe" class="btn primary">＋ Recept</button>
+      </div>
+      <ul id="recipeList" class="list"></ul>
+      <div id="emptyRecipes" class="empty" hidden>
+        <div class="empty-icon">🍳</div>
+        <p>Nog geen recepten.</p>
+        <p class="muted small">Voeg jullie vaste recepten toe. Daarna zie je per recept wat er nog ontbreekt en zet je dat met één tik op de lijst.</p>
+      </div>
+    </section>
+
+    <!-- GESCHIEDENIS -->
+    <section id="view-log" class="view">
+      <div id="statsCard"></div>
+      <ul id="logList" class="list log"></ul>
+      <div id="emptyLog" class="empty" hidden>
+        <div class="empty-icon">📜</div>
+        <p>Nog geen geschiedenis.</p>
+      </div>
+    </section>
+
+    <!-- INSTELLINGEN -->
+    <section id="view-settings" class="view">
+      <div class="card settings">
+        <label class="field">
+          <span>Jouw naam</span>
+          <input id="myName" type="text" placeholder="bijv. Joost" autocomplete="given-name">
+        </label>
+        <p class="muted small">Wordt bij elke wijziging getoond, zodat jullie zien wie wat deed.</p>
+      </div>
+
+      <div class="card settings">
+        <h2>Samen gebruiken</h2>
+        <div id="shareBlock"></div>
+      </div>
+
+      <div class="card settings">
+        <h2>Gegevens</h2>
+        <button id="exportCsv" class="btn secondary block">⬇️ Exporteer voorraad naar CSV</button>
+      </div>
+
+      <div class="card settings">
+        <h2>Bewaartijden vriezer</h2>
+        <p class="muted small">Bij toevoegen aan de vriezer wordt de THT automatisch voorgesteld op basis van de categorie. Je kunt hem altijd aanpassen.</p>
+        <ul id="durations" class="durations"></ul>
+      </div>
+    </section>
+  </main>
+
+  <button id="fab" class="fab" aria-label="Product toevoegen">+</button>
+
+  <nav class="tabbar">
+    <button data-view="stock" class="active"><span>📦</span>Voorraad</button>
+    <button data-view="shop"><span>🛒</span>Lijst<b id="shopBadge" class="tab-badge" hidden></b></button>
+    <button data-view="recipes"><span>🍳</span>Recepten</button>
+    <button data-view="log"><span>📜</span>Historie</button>
+    <button data-view="settings"><span>⚙️</span>Instellingen</button>
+  </nav>
+
+  <!-- Toevoegen / bewerken -->
+  <dialog id="itemDialog" class="sheet">
+    <form id="itemForm" method="dialog" autocomplete="off">
+      <div class="sheet-head">
+        <h2 id="itemTitle">Toevoegen</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <label class="field">
+        <span>Product</span>
+        <div class="input-row">
+          <input name="name" list="nameList" required placeholder="bijv. Pindakaas">
+          <button type="button" id="formScan" class="icon-btn square" aria-label="Barcode scannen">📷</button>
+        </div>
+        <datalist id="nameList"></datalist>
+        <small id="barcodeInfo" class="muted"></small>
+      </label>
+      <div class="segmented" id="spaceSeg" role="radiogroup" aria-label="Locatie"></div>
+      <div class="row">
+        <label class="field grow">
+          <span>Aantal / gewicht</span>
+          <div class="stepper">
+            <button type="button" data-step="-1" aria-label="Minder">−</button>
+            <input name="qty" type="number" inputmode="decimal" min="0" step="any" required value="1">
+            <button type="button" data-step="1" aria-label="Meer">+</button>
+          </div>
+        </label>
+        <label class="field">
+          <span>Eenheid</span>
+          <select name="unit"></select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="field grow">
+          <span>Categorie</span>
+          <select name="category"></select>
+        </label>
+        <label class="field grow">
+          <span>Plek</span>
+          <input name="location" list="locationList" placeholder="bijv. Lade 1">
+          <datalist id="locationList"></datalist>
+        </label>
+      </div>
+      <div class="row">
+        <label class="field grow">
+          <span id="dateLabel">In vriezer</span>
+          <input name="frozenAt" type="date" required>
+        </label>
+        <label class="field grow">
+          <span>THT <small id="thtHint" class="muted"></small></span>
+          <input name="bestBefore" type="date">
+        </label>
+      </div>
+      <div class="row">
+        <label class="field grow">
+          <span>Minimaal in huis</span>
+          <input name="min" type="number" inputmode="decimal" min="0" step="any" placeholder="geen">
+        </label>
+        <label class="field grow">
+          <span>Winkel</span>
+          <input name="store" list="storeList" placeholder="bijv. Albert Heijn">
+          <datalist id="storeList"></datalist>
+        </label>
+      </div>
+      <p class="muted small hint">Zakt de voorraad onder het minimum, dan komt het vanzelf op de boodschappenlijst.</p>
+      <label class="field">
+        <span>Notitie</span>
+        <input name="note" placeholder="bijv. gemarineerd, voor 2 pers.">
+      </label>
+      <input type="hidden" name="barcode">
+      <div class="sheet-actions">
+        <button type="button" id="deleteItem" class="btn danger" hidden aria-label="Verwijderen">🗑️</button>
+        <button type="button" id="takeFromEdit" class="btn secondary" hidden>Eruit halen…</button>
+        <button type="submit" class="btn primary grow">Opslaan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Uit de voorraad -->
+  <dialog id="takeDialog" class="sheet">
+    <form id="takeForm" method="dialog">
+      <div class="sheet-head">
+        <h2 id="takeTitle">Eruit halen</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <p id="takeInfo" class="muted"></p>
+      <label class="field">
+        <span>Hoeveel haal je eruit?</span>
+        <div class="stepper big">
+          <button type="button" data-step="-1" aria-label="Minder">−</button>
+          <input name="qty" type="number" inputmode="decimal" min="0" step="any" required>
+          <button type="button" data-step="1" aria-label="Meer">+</button>
+        </div>
+      </label>
+      <div class="segmented" role="radiogroup" aria-label="Reden">
+        <label><input type="radio" name="reason" value="used" checked><span>🍽️ Opgemaakt</span></label>
+        <label><input type="radio" name="reason" value="trashed"><span>🗑️ Weggegooid</span></label>
+      </div>
+      <label class="check" id="toListRow"><input type="checkbox" name="toList"> 🛒 Zet op de boodschappenlijst als het op is</label>
+      <div class="sheet-actions">
+        <button type="button" id="takeAll" class="btn secondary">Alles</button>
+        <button type="submit" class="btn primary grow">Eruit halen</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Gescand bekend product -->
+  <dialog id="quickDialog" class="sheet">
+    <form method="dialog">
+      <div class="sheet-head">
+        <h2 id="quickTitle"></h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <p id="quickInfo" class="muted"></p>
+      <div class="quick-actions">
+        <button type="button" class="btn secondary" data-quick="dec">− Eruit</button>
+        <button type="button" class="btn primary" data-quick="inc">+ Erbij</button>
+      </div>
+      <button type="button" class="btn secondary block" data-quick="edit">✏️ Bewerken</button>
+    </form>
+  </dialog>
+
+  <!-- Recept bekijken -->
+  <dialog id="recipeDialog" class="sheet">
+    <form method="dialog" id="recipeView">
+      <div class="sheet-head">
+        <h2 id="recipeTitle"></h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <p id="recipeNote" class="muted small" hidden></p>
+      <div class="persons">
+        <span>Voor hoeveel personen?</span>
+        <div class="stepper">
+          <button type="button" data-pstep="-1" aria-label="Minder">−</button>
+          <input id="persons" type="number" inputmode="numeric" min="1" step="1" value="2">
+          <button type="button" data-pstep="1" aria-label="Meer">+</button>
+        </div>
+      </div>
+      <ul id="ingList" class="ing-list"></ul>
+      <button type="button" id="addMissing" class="btn primary block">🛒 Op de lijst</button>
+      <div class="row">
+        <button type="button" id="planBtn" class="btn secondary grow">📅 Op het menu</button>
+        <button type="button" id="cookBtn" class="btn secondary grow">🍳 Gekookt</button>
+      </div>
+      <button type="button" id="editRecipe" class="btn secondary block">✏️ Recept bewerken</button>
+    </form>
+  </dialog>
+
+  <!-- Recept bewerken -->
+  <dialog id="recipeEditDialog" class="sheet">
+    <form id="recipeForm" method="dialog" autocomplete="off">
+      <div class="sheet-head">
+        <h2 id="recipeEditTitle">Nieuw recept</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <div class="row">
+        <label class="field grow">
+          <span>Naam</span>
+          <input name="name" required placeholder="bijv. Kip-tomaat ovenschotel">
+        </label>
+        <label class="field narrow">
+          <span>Personen</span>
+          <input name="servings" type="number" inputmode="numeric" min="1" value="2" required>
+        </label>
+      </div>
+      <label class="field">
+        <span>Ingrediënten</span>
+        <textarea name="ingredients" rows="6" placeholder="200 gram kipfilet&#10;1 ui&#10;2 teentjes knoflook&#10;1 blik tomatenblokjes"></textarea>
+      </label>
+      <div class="input-row dictate-row">
+        <button type="button" id="dictateBtn" class="btn secondary grow" hidden>🎤 Inspreken</button>
+      </div>
+      <p class="muted small hint">Eén ingrediënt per regel of gescheiden door komma's. Je kunt ook inspreken met de 🎤 op je toetsenbord, bijvoorbeeld: <i>"200 gram kipfilet, 1 ui, 2 teentjes knoflook"</i>.</p>
+      <div id="ingPreview" class="ing-preview"></div>
+      <label class="field">
+        <span>Notitie / bron</span>
+        <input name="note" placeholder="bijv. Broodje Dunner e-book 3, blz. 42">
+      </label>
+      <div class="sheet-actions">
+        <button type="button" id="deleteRecipe" class="btn danger" hidden aria-label="Recept verwijderen">🗑️</button>
+        <button type="submit" class="btn primary grow">Opslaan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Gekookt: afboeken -->
+  <dialog id="cookDialog" class="sheet">
+    <form id="cookForm" method="dialog">
+      <div class="sheet-head">
+        <h2 id="cookTitle">Gekookt</h2>
+        <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+      </div>
+      <p class="muted small">Wat is er uit de voorraad gebruikt? Pas aan waar nodig.</p>
+      <ul id="cookList" class="list"></ul>
+      <p id="cookEmpty" class="muted" hidden>Geen van de ingrediënten staat in de voorraad.</p>
+      <div class="sheet-actions">
+        <button type="submit" class="btn primary grow">Afboeken uit voorraad</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Scanner -->
+  <dialog id="scanDialog" class="sheet scan">
+    <div class="sheet-head pad">
+      <h2>Scan barcode</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Sluiten">✕</button>
+    </div>
+    <div class="scan-view">
+      <video id="scanVideo" playsinline muted></video>
+      <div class="scan-frame"></div>
+    </div>
+    <p id="scanMsg" class="muted pad center">Richt de camera op de barcode…</p>
+    <form id="manualCode" class="input-row pad">
+      <input name="code" inputmode="numeric" placeholder="of typ de barcode" aria-label="Barcode handmatig">
+      <button class="btn secondary">OK</button>
+    </form>
+  </dialog>
+
+  <!-- Eerste keer -->
+  <dialog id="welcomeDialog" class="sheet">
+    <form id="welcomeForm" method="dialog">
+      <div class="sheet-head"><h2>Welkom 👋</h2></div>
+      <p>Hiermee houden jullie samen bij wat er in de vriezer, voorraadkast en koelkast ligt.</p>
+      <label class="field">
+        <span>Hoe heet je?</span>
+        <input name="name" required autocomplete="given-name" placeholder="Je voornaam">
+      </label>
+      <div class="sheet-actions">
+        <button type="submit" class="btn primary grow">Starten</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
