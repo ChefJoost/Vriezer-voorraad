@@ -15,6 +15,11 @@ Een simpele, mobielvriendelijke web-app om samen bij te houden wat er in huis li
 - **Eerst op**: sortering op THT, kleurmarkering voor bijna/over datum.
 - **Geschiedenis**: wie wat erin legde, eruit haalde of kocht.
 - **Samen gebruiken** via een privé deel-link; **installeerbaar** op het beginscherm en werkt offline.
+- **Recepten**: jullie vaste recepten met ingrediënten. Typ ze of spreek ze in (*"200 gram kipfilet, 1 ui, 2 teentjes knoflook"*), de app herkent hoeveelheden en eenheden.
+  - Per recept zie je wat er in huis is (✅), wat er tekort is (⚠️) en wat ontbreekt (❌), omgerekend naar het aantal personen.
+  - **🛒 Op de lijst**: ontbrekende ingrediënten met één tik op de boodschappenlijst.
+  - **📅 Op het menu**: plan recepten en zet in één keer alles voor het menu op de lijst.
+  - **🍳 Gekookt**: boekt de gebruikte ingrediënten af uit de voorraad.
 - **CSV-export**.
 
 ## Online zetten (GitHub Pages)
@@ -52,6 +57,7 @@ Iedere vriezer heeft een lange, willekeurige code (in de deel-link). De Firestor
 | `styles.css` | Opmaak (licht/donker, mobiel eerst) |
 | `app.js` | App-logica |
 | `store.js` | Opslag: lokaal of Firebase |
+| `recipes.js` | Ingrediënten herkennen en vergelijken met de voorraad |
 | `vendor/firebase.js` | Meegebundelde Firebase SDK v10.12.2 (geen externe CDN nodig) |
 | `vendor/barcode.js`, `vendor/zxing_reader.wasm` | Barcode-lezer (barcode-detector 2.2.11 / zxing-wasm 1.2.14) voor telefoons zonder ingebouwde scanner, zoals iPhone |
 | `config.js` | Firebase-instellingen (optioneel) |

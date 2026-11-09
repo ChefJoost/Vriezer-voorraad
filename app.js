@@ -1,5 +1,6 @@
 import { firebaseConfig } from './config.js';
 import { createStore, newId } from './store.js';
+import { parseIngredients, ingredientToText, checkIngredient, findMatches, toShopping, cookAmount } from './recipes.js';
 
 /* ---------------- Constanten ---------------- */
 const SPACES = [
@@ -135,6 +136,10 @@ const state = {
   editingId: null,
   takingId: null,
   quickId: null,
+  recipes: [],
+  recipeId: null,
+  editingRecipeId: null,
+  recipeSearch: '',
 };
 let store;
 const me = () => ls.get('vv:name', '') || 'Iemand';
@@ -163,7 +168,7 @@ async function changeQty(item, delta, { reason = 'used', toList = false } = {}) 
   let undoLog;
   if (delta > 0) {
     const patch = { qty: next, updatedBy: me(), updatedAt: Date.now() };
-    if (item.qty <= 0) Object.assign(patch, freshDates(item), { want: 0 });
+    if (item.qty <= 0) Object.assign(patch, freshDates(item), { want: 0, wantFor: '' });
     await store.updateItem(id, patch);
     undoLog = await logChange({ ...logBase(item), type: 'in', qty: round(next - item.qty) });
     toast(`${item.name}: nu ${fmtQty(next, item.unit)}`, [undoAction(() => { restore(); undoLog(); })]);
@@ -351,7 +356,7 @@ function renderShop() {
       <button class="check-btn" data-bought="${i.id}" aria-label="${esc(i.name)} gekocht">✓</button>
       <button class="item-main" data-edit="${i.id}">
         <div class="item-name">${esc(i.name)} <span class="muted">· ${esc(fmtQty(need, i.unit))}</span></div>
-        <div class="item-meta">${sp.icon} ${esc(sp.short)} · ${esc(why)}</div>
+        <div class="item-meta">${sp.icon} ${esc(sp.short)} · ${esc(i.wantFor ? `voor ${i.wantFor}` : why)}</div>
       </button>
       <button class="icon-btn" data-skip="${i.id}" aria-label="Niet nodig" title="Niet nodig">✕</button>
     </li>`;
@@ -364,7 +369,7 @@ function renderShop() {
 async function markBought(item) {
   const need = needOf(item);
   const { id, ...before } = item;
-  const patch = { qty: round(item.qty + need), want: 0, snoozedUntil: 0, updatedBy: me(), updatedAt: Date.now() };
+  const patch = { qty: round(item.qty + need), want: 0, wantFor: '', snoozedUntil: 0, updatedBy: me(), updatedAt: Date.now() };
   if (item.qty <= 0) Object.assign(patch, freshDates(item));
   await store.updateItem(id, patch);
   const undoLog = await logChange({ ...logBase(item), type: 'in', reason: 'bought', qty: need });
@@ -375,7 +380,7 @@ async function skipItem(item) {
   const { id, ...before } = item;
   const belowMin = Number(item.min) > 0 && item.qty < Number(item.min);
   if (item.qty <= 0 && !(Number(item.min) > 0)) await store.deleteItem(id);
-  else await store.updateItem(id, { want: 0, ...(belowMin ? { snoozedUntil: Date.now() + SNOOZE_DAYS * 86400000 } : {}) });
+  else await store.updateItem(id, { want: 0, wantFor: '', ...(belowMin ? { snoozedUntil: Date.now() + SNOOZE_DAYS * 86400000 } : {}) });
   toast(belowMin ? `${item.name} ${SNOOZE_DAYS} dagen van de lijst` : `${item.name} van de lijst`, [undoAction(() => store.setItem(id, before))]);
 }
 
@@ -737,6 +742,346 @@ function decrement(item) {
   changeQty(item, -1);
 }
 
+
+/* ---------------- Recepten ---------------- */
+const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+const recipeById = (id) => state.recipes.find((r) => r.id === id);
+const personsFor = (r) => Number(r.planned) || Number(r.servings) || 2;
+
+function recipeStatus(r, persons = personsFor(r)) {
+  const factor = persons / (Number(r.servings) || 1);
+  const rows = (r.ingredients || []).map((ing) => ({ ing, ...checkIngredient(ing, state.items, factor) }));
+  const lacking = rows.filter((x) => x.status === 'missing' || x.status === 'short');
+  const onList = lacking.filter((x) => x.matches[0] && needOf(x.matches[0]) > 0).length;
+  return { rows, missing: lacking.length - onList, onList, factor };
+}
+function statusBadge(st, asText = false) {
+  if (st.missing) return asText ? `<span class="warn-text">${st.missing} ontbreken</span>` : `<span class="badge warn">${st.missing} ontbreken</span>`;
+  if (st.onList) return asText ? `🛒 ${st.onList} op de lijst` : `<span class="badge info">🛒 ${st.onList} op de lijst</span>`;
+  return asText ? '✓ alles in huis' : '<span class="badge">✓ alles in huis</span>';
+}
+
+function renderRecipes() {
+  const planned = state.recipes.filter((r) => Number(r.planned) > 0).sort((a, b) => (a.plannedAt || 0) - (b.plannedAt || 0));
+  const menu = $('#menuBlock');
+  if (planned.length) {
+    menu.innerHTML = `<h2 class="section-title">📅 Op het menu</h2>
+      <ul class="list">${planned.map((r) => {
+        const st = recipeStatus(r);
+        return `<li class="item">
+          <div class="item-icon">🍽️</div>
+          <button class="item-main" data-recipe="${r.id}">
+            <div class="item-name">${esc(r.name)}</div>
+            <div class="item-meta">${personsFor(r)} pers · ${statusBadge(st, true)}</div>
+          </button>
+          <button class="take-btn" data-cooked="${r.id}">🍳 Gekookt</button>
+        </li>`;
+      }).join('')}</ul>
+      <button id="menuToList" class="btn secondary block">🛒 Alles voor het menu op de lijst</button>`;
+  } else menu.innerHTML = '';
+
+  const q = state.recipeSearch.trim().toLowerCase();
+  const list = state.recipes
+    .filter((r) => !q || `${r.name} ${(r.ingredients || []).map((i) => i.name).join(' ')}`.toLowerCase().includes(q))
+    .sort((a, b) => (b.lastCooked || 0) - (a.lastCooked || 0) || a.name.localeCompare(b.name, 'nl'));
+  $('#recipeList').innerHTML = list.map((r) => {
+    const st = recipeStatus(r);
+    const n = (r.ingredients || []).length;
+    return `<li class="item">
+      <div class="item-icon">🍳</div>
+      <button class="item-main" data-recipe="${r.id}">
+        <div class="item-name">${esc(r.name)}</div>
+        <div class="item-meta">${r.servings} pers · ${n} ingrediënt${n === 1 ? '' : 'en'}${r.lastCooked ? ` · laatst ${fmtDate(toISO(new Date(r.lastCooked)))}` : ''}</div>
+        <div class="badges">${statusBadge(st)}${Number(r.planned) > 0 ? '<span class="badge info">📅 op het menu</span>' : ''}</div>
+      </button>
+    </li>`;
+  }).join('');
+  $('#emptyRecipes').hidden = state.recipes.length > 0;
+}
+
+$('#view-recipes').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-cooked]');
+  if (c) return openCook(recipeById(c.dataset.cooked));
+  const r = e.target.closest('[data-recipe]');
+  if (r) return openRecipe(recipeById(r.dataset.recipe));
+  if (e.target.closest('#menuToList')) menuToList();
+});
+$('#recipeSearch').addEventListener('input', (e) => { state.recipeSearch = e.target.value; renderRecipes(); });
+$('#newRecipe').addEventListener('click', () => openRecipeEdit());
+
+/* Detail */
+const ingChecked = new Map(); // index → aangevinkt voor de lijst
+function openRecipe(r) {
+  if (!r) return;
+  state.recipeId = r.id;
+  ingChecked.clear();
+  $('#persons').value = personsFor(r);
+  $('#recipeDialog').showModal();
+  renderRecipeDetail();
+}
+function renderRecipeDetail() {
+  const r = recipeById(state.recipeId);
+  if (!r) { $('#recipeDialog').close(); return; }
+  $('#recipeTitle').textContent = r.name;
+  $('#recipeNote').textContent = r.note || '';
+  $('#recipeNote').hidden = !r.note;
+  const st = recipeStatus(r, Number($('#persons').value) || 1);
+  $('#ingList').innerHTML = st.rows.map((x, idx) => {
+    const scaled = { ...x.ing, qty: round(x.need) };
+    const m = x.matches[0];
+    const icon = { ok: '✅', short: '⚠️', missing: '❌', basic: '❔' }[x.status];
+    const info = x.status === 'ok' ? `in huis: ${x.matches.map((mm) => fmtQty(mm.qty, mm.unit)).join(' + ')}`
+      : x.status === 'short' ? `nog ${fmtNum(round(x.have))}, tekort ${fmtNum(round(x.missing))}${m && needOf(m) > 0 ? ' · 🛒 op de lijst' : ''}`
+      : x.status === 'basic' ? 'basis – zelf checken' : (m && needOf(m) > 0 ? '🛒 staat al op de lijst' : 'niet in huis');
+    const checkable = x.status !== 'ok';
+    if (checkable && !ingChecked.has(idx)) ingChecked.set(idx, x.status !== 'basic' && !(m && needOf(m) > 0));
+    return `<li class="ing ${x.status}">
+      ${checkable ? `<input type="checkbox" data-ing="${idx}" ${ingChecked.get(idx) ? 'checked' : ''} aria-label="Op de lijst">` : '<span class="ing-spacer"></span>'}
+      <span class="ing-icon">${icon}</span>
+      <span class="ing-text"><b>${esc(ingredientToText(scaled))}</b><small>${esc(info)}</small></span>
+    </li>`;
+  }).join('');
+  const n = [...ingChecked.entries()].filter(([idx, v]) => v && st.rows[idx] && st.rows[idx].status !== 'ok').length;
+  $('#addMissing').textContent = n ? `🛒 Zet ${n} ingrediënt${n === 1 ? '' : 'en'} op de lijst` : '✓ Niets nodig voor de lijst';
+  $('#addMissing').disabled = !n;
+  $('#planBtn').textContent = Number(r.planned) > 0 ? '📅 Van het menu' : '📅 Op het menu';
+}
+$('#ingList').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-ing]');
+  if (cb) { ingChecked.set(Number(cb.dataset.ing), cb.checked); renderRecipeDetail(); }
+});
+$('#recipeView').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pstep]');
+  if (!b) return;
+  const inp = $('#persons');
+  inp.value = Math.max(1, (Number(inp.value) || 1) + Number(b.dataset.pstep));
+  renderRecipeDetail();
+});
+$('#persons').addEventListener('input', renderRecipeDetail);
+
+$('#addMissing').addEventListener('click', async () => {
+  const r = recipeById(state.recipeId);
+  const st = recipeStatus(r, Number($('#persons').value) || 1);
+  const lines = st.rows.filter((x, idx) => ingChecked.get(idx) && x.status !== 'ok');
+  const n = await addToList(lines.map((x) => ({ ing: x.ing, missing: x.status === 'short' ? x.missing : x.need, match: x.matches[0] })), r.name);
+  ingChecked.clear();
+  toast(`${n} ingrediënt${n === 1 ? '' : 'en'} op de lijst 🛒`, [{ label: 'Bekijk', run: () => { $('#recipeDialog').close(); showView('shop'); } }]);
+});
+
+// Zet ingrediënten op de boodschappenlijst; bundelt alles per product in één schrijfactie
+async function addToList(lines, forName) {
+  const updates = new Map(); // item-id → extra
+  const creates = new Map(); // naam → nieuw item
+  lines.forEach(({ ing, missing, match }) => {
+    const shop = toShopping(ing, missing, match);
+    if (match) {
+      const u = updates.get(match.id) || { item: match, add: 0 };
+      u.add += shop.qty; updates.set(match.id, u);
+    } else {
+      const key = ing.name.toLowerCase();
+      const c = creates.get(key) || { ing, unit: shop.unit, qty: 0 };
+      c.qty += shop.qty; creates.set(key, c);
+    }
+  });
+  for (const { item, add } of updates.values()) {
+    await store.updateItem(item.id, { want: round(needOf(item) + add), wantFor: forName, snoozedUntil: 0 });
+  }
+  for (const { ing, unit, qty } of creates.values()) {
+    const prev = state.log.find((l) => sameName(l.name, ing.name));
+    await store.addItem({
+      name: capitalize(ing.name), qty: 0, want: round(qty), wantFor: forName, unit: prev?.unit || unit,
+      category: prev?.category || 'overig', space: prev?.space || 'kast', location: '', frozenAt: today(), bestBefore: '',
+      note: '', min: 0, store: '', barcode: '', addedBy: me(), createdAt: Date.now(),
+    });
+  }
+  return updates.size + creates.size;
+}
+
+async function menuToList() {
+  const planned = state.recipes.filter((r) => Number(r.planned) > 0);
+  // ingrediënten van alle geplande recepten samenvoegen, zodat gedeelde producten niet dubbel geteld worden
+  const combined = new Map();
+  planned.forEach((r) => {
+    const factor = personsFor(r) / (Number(r.servings) || 1);
+    (r.ingredients || []).forEach((ing) => {
+      const key = `${ing.name.toLowerCase()}|${ing.unit}`;
+      const c = combined.get(key) || { ...ing, qty: 0 };
+      c.qty += ing.qty * factor; combined.set(key, c);
+    });
+  });
+  const lines = [];
+  combined.forEach((ing) => {
+    const x = checkIngredient(ing, state.items, 1);
+    if (x.status === 'missing' || x.status === 'short') {
+      const m = x.matches[0];
+      if (m && needOf(m) > 0 && x.status === 'missing') return; // staat al op de lijst
+      lines.push({ ing, missing: x.status === 'short' ? x.missing : x.need, match: m });
+    }
+  });
+  if (!lines.length) return toast('Alles voor het menu is in huis ✓');
+  const n = await addToList(lines, planned.length === 1 ? planned[0].name : 'het menu');
+  toast(`${n} ingrediënt${n === 1 ? '' : 'en'} op de lijst 🛒`, [{ label: 'Bekijk', run: () => showView('shop') }]);
+}
+
+$('#planBtn').addEventListener('click', async () => {
+  const r = recipeById(state.recipeId);
+  const on = !(Number(r.planned) > 0);
+  await store.updateItem(r.id, on ? { planned: Number($('#persons').value) || r.servings, plannedAt: Date.now() } : { planned: 0 });
+  toast(on ? `${r.name} staat op het menu 📅` : `${r.name} van het menu`);
+});
+$('#cookBtn').addEventListener('click', () => {
+  const r = recipeById(state.recipeId);
+  $('#recipeDialog').close();
+  openCook(r, Number($('#persons').value) || personsFor(r));
+});
+$('#editRecipe').addEventListener('click', () => {
+  const r = recipeById(state.recipeId);
+  $('#recipeDialog').close();
+  openRecipeEdit(r);
+});
+
+/* Gekookt → afboeken */
+let cookRecipeId = null;
+function openCook(r, persons = personsFor(r)) {
+  if (!r) return;
+  cookRecipeId = r.id;
+  $('#cookTitle').textContent = `Gekookt: ${r.name}`;
+  const factor = persons / (Number(r.servings) || 1);
+  const rows = new Map(); // item-id → {item, amount}
+  (r.ingredients || []).forEach((ing) => {
+    const m = findMatches(ing.name, state.items).find((it) => it.qty > 0);
+    if (!m) return;
+    const cur = rows.get(m.id) || { item: m, amount: 0 };
+    cur.amount = Math.min(m.qty, round(cur.amount + cookAmount(ing, m, factor)));
+    rows.set(m.id, cur);
+  });
+  $('#cookList').innerHTML = [...rows.values()].map(({ item, amount }) => `
+    <li class="item cook-row">
+      <div class="item-main">
+        <div class="item-name">${esc(item.name)}</div>
+        <div class="item-meta">${SPACE[spaceOf(item)].icon} ${esc(fmtQty(item.qty, item.unit))} in huis</div>
+      </div>
+      <div class="stepper small">
+        <button type="button" data-cstep="-1">−</button>
+        <input type="number" inputmode="decimal" min="0" max="${item.qty}" step="any" value="${amount}" data-cook="${item.id}" aria-label="${esc(item.name)} afboeken">
+        <button type="button" data-cstep="1">+</button>
+      </div>
+      <small class="unit">${esc(item.unit)}</small>
+    </li>`).join('');
+  $('#cookEmpty').hidden = rows.size > 0;
+  $('#cookDialog').showModal();
+}
+$('#cookList').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-cstep]');
+  if (!b) return;
+  const inp = b.parentElement.querySelector('input');
+  const item = byId(inp.dataset.cook);
+  inp.value = Math.min(item.qty, Math.max(0, round((Number(inp.value) || 0) + stepFor(item.unit) * Number(b.dataset.cstep))));
+});
+$('#cookForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const r = recipeById(cookRecipeId);
+  $('#cookDialog').close();
+  const undos = [];
+  for (const inp of $$('#cookList input[data-cook]')) {
+    const item = byId(inp.dataset.cook);
+    const amt = Math.min(item?.qty || 0, Number(inp.value) || 0);
+    if (!item || amt <= 0) continue;
+    const { id, ...before } = item;
+    const next = round(item.qty - amt);
+    if (next > 0 || Number(item.min) > 0) await store.updateItem(id, { qty: next, updatedBy: me(), updatedAt: Date.now() });
+    else await store.deleteItem(id);
+    const logId = await store.addLog({ ...logBase(item), type: 'out', reason: 'used', qty: amt, by: me(), at: Date.now(), note: r ? `voor ${r.name}` : '' });
+    undos.push(() => { store.setItem(id, before); store.deleteLog(logId); });
+  }
+  if (r) {
+    const before = { lastCooked: r.lastCooked || 0, planned: r.planned || 0 };
+    await store.updateItem(r.id, { lastCooked: Date.now(), planned: 0 });
+    undos.push(() => store.updateItem(r.id, before));
+  }
+  toast(`Eet smakelijk! ${undos.length - (r ? 1 : 0)} product${undos.length - (r ? 1 : 0) === 1 ? '' : 'en'} afgeboekt`, [undoAction(() => undos.forEach((u) => u()))]);
+});
+
+/* Recept bewerken */
+const recipeForm = $('#recipeForm');
+function openRecipeEdit(r = null) {
+  state.editingRecipeId = r?.id || null;
+  $('#recipeEditTitle').textContent = r ? 'Recept bewerken' : 'Nieuw recept';
+  recipeForm.name.value = r?.name || '';
+  recipeForm.servings.value = r?.servings || 2;
+  recipeForm.ingredients.value = (r?.ingredients || []).map(ingredientToText).join('\n');
+  recipeForm.note.value = r?.note || '';
+  $('#deleteRecipe').hidden = !r;
+  renderPreview();
+  $('#recipeEditDialog').showModal();
+  if (!r) setTimeout(() => recipeForm.name.focus(), 50);
+}
+function renderPreview() {
+  const ings = parseIngredients(recipeForm.ingredients.value);
+  $('#ingPreview').innerHTML = ings.length
+    ? `<p class="muted small">Herkend (${ings.length}):</p><div class="chips wrap">${ings.map((i) => `<span class="chip">${esc(ingredientToText(i))}</span>`).join('')}</div>`
+    : '';
+}
+recipeForm.ingredients.addEventListener('input', renderPreview);
+recipeForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = {
+    kind: 'recipe',
+    name: recipeForm.name.value.trim(),
+    servings: Math.max(1, Number(recipeForm.servings.value) || 2),
+    ingredients: parseIngredients(recipeForm.ingredients.value).map(({ qty, unit, name }) => ({ qty: round(qty), unit, name })),
+    note: recipeForm.note.value.trim(),
+  };
+  if (!data.name) return;
+  stopDictation();
+  $('#recipeEditDialog').close();
+  if (state.editingRecipeId) {
+    await store.updateItem(state.editingRecipeId, { ...data, updatedBy: me(), updatedAt: Date.now() });
+    toast('Recept opgeslagen');
+    openRecipe(recipeById(state.editingRecipeId));
+  } else {
+    const id = await store.addItem({ ...data, planned: 0, lastCooked: 0, addedBy: me(), createdAt: Date.now() });
+    toast(`${data.name} toegevoegd`);
+    setTimeout(() => openRecipe(recipeById(id)), 100);
+  }
+});
+$('#deleteRecipe').addEventListener('click', async () => {
+  const r = recipeById(state.editingRecipeId);
+  if (!r || !confirm(`Recept "${r.name}" verwijderen?`)) return;
+  $('#recipeEditDialog').close();
+  const { id, ...data } = r;
+  await store.deleteItem(id);
+  toast('Recept verwijderd', [undoAction(() => store.setItem(id, data))]);
+});
+
+// Inspreken in de app zelf (Chrome/Android, Safari); anders via de microfoon op het toetsenbord
+const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null;
+if (Speech) $('#dictateBtn').hidden = false;
+function stopDictation() { try { recog?.stop(); } catch {} }
+$('#dictateBtn').addEventListener('click', () => {
+  if (recog) return stopDictation();
+  recog = new Speech();
+  recog.lang = 'nl-NL';
+  recog.continuous = true;
+  recog.interimResults = false;
+  recog.onresult = (ev) => {
+    for (let k = ev.resultIndex; k < ev.results.length; k++) {
+      if (!ev.results[k].isFinal) continue;
+      const t = ev.results[k][0].transcript.trim();
+      const ta = recipeForm.ingredients;
+      ta.value = `${ta.value.trim()}${ta.value.trim() ? '\n' : ''}${t}`;
+      renderPreview();
+    }
+  };
+  recog.onend = () => { recog = null; $('#dictateBtn').textContent = '🎤 Inspreken'; $('#dictateBtn').classList.remove('recording'); };
+  recog.onerror = (ev) => { if (ev.error === 'not-allowed') toast('Geen toegang tot de microfoon'); };
+  recog.start();
+  $('#dictateBtn').textContent = '⏹️ Stop inspreken';
+  $('#dictateBtn').classList.add('recording');
+});
+$('#recipeEditDialog').addEventListener('close', stopDictation);
+
 /* ---------------- Steppers & dialogen ---------------- */
 document.addEventListener('click', (e) => {
   const step = e.target.closest('[data-step]');
@@ -806,7 +1151,7 @@ function showView(name) {
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
   $$('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
   $('#fab').hidden = name !== 'stock';
-  $('#appTitle').textContent = { shop: '🛒 Boodschappen', log: '📜 Geschiedenis', settings: '⚙️ Instellingen' }[name] || '';
+  $('#appTitle').textContent = { shop: '🛒 Boodschappen', recipes: '🍳 Recepten', log: '📜 Geschiedenis', settings: '⚙️ Instellingen' }[name] || '';
   if (name === 'stock') renderSpaces();
   window.scrollTo(0, 0);
 }
@@ -883,7 +1228,12 @@ async function init() {
   fillSelects();
   const hid = resolveHousehold();
   store = await createStore(firebaseConfig, hid, setStatus);
-  store.onItems((items) => { state.items = items; renderStock(); renderShop(); });
+  store.onItems((docs) => {
+    state.items = docs.filter((d) => d.kind !== 'recipe');
+    state.recipes = docs.filter((d) => d.kind === 'recipe');
+    renderStock(); renderShop(); renderRecipes();
+    if ($('#recipeDialog').open) renderRecipeDetail();
+  });
   store.onLog((log) => { state.log = log; renderLog(); renderDatalists(); });
   renderSettings(hid);
 

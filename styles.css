@@ -286,3 +286,34 @@ dialog.scan { overflow: hidden; }
 .scan-view video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .scan-frame { position: absolute; inset: 30% 12%; border: 3px solid rgba(255,255,255,.9); border-radius: 12px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); }
 #manualCode { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+
+/* ---------- Recepten ---------- */
+.section-title { font-size: 1rem; margin: 4px 0 8px; }
+#menuBlock .btn { margin: 8px 0 16px; }
+#view-recipes .search .btn { flex: none; min-height: 44px; }
+.warn-text { color: var(--warn); font-weight: 600; }
+.persons { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.persons .stepper { width: 150px; }
+.ing-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ing { display: flex; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+.ing input[type=checkbox], .ing-spacer { width: 22px; height: 22px; flex: none; }
+.ing-icon { flex: none; width: 22px; text-align: center; }
+.ing-text { display: flex; flex-direction: column; min-width: 0; }
+.ing-text b { font-weight: 500; }
+.ing-text small { color: var(--muted); font-size: .8rem; }
+.ing.missing .ing-text small, .ing.short .ing-text small { color: var(--warn); }
+.field.narrow { width: 90px; flex: none; }
+textarea {
+  font: inherit; color: inherit; width: 100%; min-width: 0; border: 1px solid var(--border); background: var(--surface);
+  border-radius: 10px; padding: 10px 12px; resize: vertical;
+}
+.chips.wrap { flex-wrap: wrap; overflow: visible; margin: 0; padding: 4px 0 0; }
+.chips.wrap .chip { font-size: .8rem; padding: 4px 10px; }
+.ing-preview p { margin: 0; }
+.btn.recording { background: var(--bad-bg); color: var(--bad); }
+.btn:disabled { opacity: .55; }
+.cook-row { gap: 8px; }
+.stepper.small { width: 130px; flex: none; }
+.stepper.small button { width: 36px; }
+.stepper.small input { padding: 6px 4px; min-height: 40px; }
+.cook-row .unit { color: var(--muted); width: 42px; font-size: .75rem; }
